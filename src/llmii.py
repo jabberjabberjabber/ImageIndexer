@@ -528,7 +528,7 @@ class FileProcessor:
         
         self.image_processor = ImageProcessor(max_dimension=self.config.res_limit, patch_sizes=[14])
         
-        self.et = exiftool.ExifToolHelper(check_execute=False)
+        self.et = exiftool.ExifToolHelper(encoding='utf-8')
         
         # Words in the prompt tend to get repeated back by certain models
         self.banned_words = ["no", "unspecified", "unknown", "standard", "unidentified", "time", "category", "actions", "setting", "objects", "visual", "elements", "activities", "appearance", "professions", "relationships", "identify", "photography", "photographic", "topiary"]
