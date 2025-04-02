@@ -122,6 +122,17 @@ The "Status" and "Identifier" fields are used to track the processing state of i
 
 5. Monitor the progress in the output area of the GUI.
 
+## Other language
+
+To make Image Indexer fully compatible with other languages (French for instance) follow these steps:
+
+1. Into Image Indexer GUI, go to Settings then "Edit Instructions":
+   - Into the prompt, replace "Use ENGLISH only" by "Use FRENCH only"
+
+2. Into Keyword Corrections:
+   - Uncheck "Depluralize keywords"
+   - Uncheck "Only Latin characters"
+
 ## Settings
 
    **Press the HELP button in the settings dialog.**
