@@ -708,7 +708,23 @@ class FileProcessor:
                     directory, files = self.metadata_queue.get(timeout=1)
                     self.callback(f"Processing directory: {directory}")
                     self.callback(f"---")
-                    metadata_list = self._get_metadata_batch(files)
+
+                    original_file_count = len(files)
+                    # Filter out files with zero size
+                    valid_files = [f for f in files if os.path.getsize(f) > 0]
+                    skipped_count = original_file_count - len(valid_files)
+
+                    if skipped_count > 0:
+                        self.callback(f"Skipped {skipped_count} file(s) in {directory} due to zero size.")
+                        print(f"Skipped {skipped_count} file(s) in {directory} due to zero size.") # Optional: print to console too
+
+                    if not valid_files:
+                        self.callback(f"No valid (non-zero size) files found in batch for {directory}. Skipping batch.")
+                        print(f"No valid (non-zero size) files found in batch for {directory}. Skipping batch.")
+                        continue # Skip to the next item from the queue if no valid files remain
+
+                    # Use the filtered list for metadata extraction
+                    metadata_list = self._get_metadata_batch(valid_files)
                     
                     for metadata in metadata_list:
                         if metadata:
