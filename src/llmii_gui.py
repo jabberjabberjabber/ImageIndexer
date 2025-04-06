@@ -83,7 +83,7 @@ If humans are present, include:
  - Relationships between individuals
  - Emotions, expressions, body language
 
-Use ENGLISH only. Generate ONLY a JSON object with the keys Description and Keywords as follows {"Description": str, "Keywords": []}
+Use FRENCH only. Generate ONLY a JSON object with the keys Description and Keywords as follows {"Description": str, "Keywords": []}
 <EXAMPLE>
 The example input would be a stock photo of two apples, one red and one green, against a white backdrop and is a hypothetical Description and Keyword for a non-existent image.
 OUTPUT=```json{"Description": "Two apples next to each other, one green and one red, placed side by side against a white background. There is even and diffuse studio lighting. The fruit is glossy and covered with dropplets of water indicating they are fresh and recently washed. The image emphasizes the cleanliness and appetizing nature of the food", "Keywords": ["studio shot","green","fruit","red","apple","stock image","health food","appetizing","empty background","grocery","food","snack"]}```
