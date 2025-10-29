@@ -6,7 +6,7 @@ A visual language model runs on your computer and is used to create captions and
 
 On your first run you will need to choose a model to run. Your system specs will be shown next to state of the art models. When you launch the indexer the model will be downloaded to the LLMII 'resources' directory. From that point the entire toolset is running completely locally.
 
-![Screenshot](./media/output.gif)
+![Screenshot](./media/python_HcTJ5w15oq.png)
 
 ## Features
  
