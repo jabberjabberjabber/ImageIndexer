@@ -80,6 +80,10 @@ def normalize_keyword(keyword, banned_words, config=None):
     keyword = re.sub(r'-+', '-', keyword)
     keyword = re.sub(r'_', ' ', keyword)
     
+    # Check for banned words if enabled
+    if config.ban_prompt_words and keyword in banned_words:
+        return None
+    
     # For validation, we'll track both original tokens and split words
     tokens = keyword.split()
     words = []
@@ -126,10 +130,6 @@ def normalize_keyword(keyword, banned_words, config=None):
             if len(word) < 2 and word not in ['x', 'u']:
                 return None
         
-        # Check for banned words if enabled
-        if config.ban_prompt_words and word in banned_words:
-            return None
-    
     # Check if starts with 3+ digits if enabled
     if config.no_digits_start and re.match(r'^\d{3,}', words[0]):
         return None
@@ -167,52 +167,80 @@ def clean_string(data):
 def clean_json(data):
     """ LLMs like to return all sorts of garbage.
         Even when asked to give a structured output
-        the will wrap text around it explaining why
-        they chose certain things. This function 
+        they will wrap text around it explaining why
+        they chose certain things. This function
         will pull basically anything useful and turn it
-        into a dict
+        into a dict.
+
+        Handles various formats including:
+        - Direct dicts
+        - List-wrapped dicts: [{"Description": ...}]
+        - String JSON with markdown wrappers
+        - Malformed JSON requiring repair
     """
     if data is None:
-        
         return None
-    
+
     if isinstance(data, dict):
-        
         return data
-    
+
+    # Handle list-wrapped dicts (sometimes APIs return [{"Description": ...}])
+    if isinstance(data, list) and len(data) > 0:
+        if isinstance(data[0], dict):
+            return data[0]
+
     if isinstance(data, str):
+        # Try direct JSON parsing first (works with JSON grammar)
+        try:
+            result = json.loads(data)
+            # If result is a list with a dict, unwrap it
+            if isinstance(result, list) and len(result) > 0 and isinstance(result[0], dict):
+                return result[0]
+            return result
+        except:
+            pass
+
         # Try to extract JSON markdown code
         pattern = r"```json\s*(.*?)\s*```"
         match = re.search(pattern, data, re.DOTALL)
         if match:
             data = match.group(1).strip()
-
-        try:
-           return json.loads(rj(data))
-        
-        except:
-            pass
-        
-        try:
-            # first_json will return the first json found in a string
-            # repair_json tries to repair json using some heuristics
-            return json.loads(rj(first_json(data)))
-        
-        except:
-            pass    
-        
-        try:    
-            # The nuclear option - wrap whatever it is around brackets and load it
-            # Hopefully normalize_keywords will take care of any garbage
-            result = json.loads(first_json(rj("{" + data + "}")))
-            
-            if result.get("Keywords"):
-                
+            try:
+                result = json.loads(data)
+                if isinstance(result, list) and len(result) > 0 and isinstance(result[0], dict):
+                    return result[0]
                 return result
-        
+            except:
+                pass
+
+        # Fallback: Try with repair_json
+        try:
+            result = json.loads(rj(data))
+            if isinstance(result, list) and len(result) > 0 and isinstance(result[0], dict):
+                return result[0]
+            return result
         except:
             pass
-       
+
+        # Fallback: first_json + repair_json
+        try:
+            result = json.loads(rj(first_json(data)))
+            if isinstance(result, list) and len(result) > 0 and isinstance(result[0], dict):
+                return result[0]
+            return result
+        except:
+            pass
+
+        # Nuclear option: wrap in brackets and repair
+        try:
+            result = json.loads(first_json(rj("{" + data + "}")))
+            if isinstance(result, list) and len(result) > 0 and isinstance(result[0], dict):
+                result = result[0]
+            if result.get("Keywords"):
+                return result
+        except:
+            pass
+
     return None
 
 
@@ -239,7 +267,7 @@ class Config:
         self.update_caption = False
         self.use_sidecar = False
         self.normalize_keywords = True
-        self.depluralize_keywords = True
+        self.depluralize_keywords = False
         self.limit_word_count = True
         self.max_words_per_keyword = 2
         self.split_and_entries = True
@@ -248,38 +276,42 @@ class Config:
         self.min_word_length = True
         self.latin_only = True
         self.caption_instruction = "Describe the image. Be specific"
-        self.system_instruction = "You describe the image and generate keywords."
+        self.system_instruction = "You are a helpful assistant."
         self.keyword_instruction = ""
-        self.instruction = """The tasks are to describe the image and to come up with a large set of keyword tags for it.
+
+        # Sampler settings
+        self.temperature = 0.2
+        self.top_p = 1.0
+        self.rep_pen = 1.01
+        self.top_k = 100
+        self.min_p = 0.05
+
+        self.instruction = """Return a JSON object containing a Description for the image and a list of Keywords.
 
 Write the Description using the active voice.
 
-The Keywords must be one or two words each. Generate as many Keywords as possible using a controlled and consistent vocabulary.
+Generate 5 to 10 Keywords. Each Keyword is an item in a list and will be composed of a maximum of two words.
 
 For both Description and Keywords, make sure to include:
 
  - Themes, concepts
  - Items, animals, objects
  - Structures, landmarks, setting
- - Foreground and background elements   
+ - Foreground and background elements
  - Notable colors, textures, styles
  - Actions, activities
 
-If humans are present, include: 
+If humans are present, include:
  - Physical appearance
  - Gender
- - Clothing 
+ - Clothing
  - Age range
  - Visibly apparent ancestry
  - Occupation/role
  - Relationships between individuals
  - Emotions, expressions, body language
 
-Use ENGLISH only. Generate ONLY a JSON object with the keys Description and Keywords as follows {"Description": str, "Keywords": []}
-<EXAMPLE>
-The example input would be a stock photo of two apples, one red and one green, against a white backdrop and is a hypothetical Description and Keyword for a non-existent image.
-OUTPUT=```json{"Description": "Two apples next to each other, one green and one red, placed side by side against a white background. There is even and diffuse studio lighting. The fruit is glossy and covered with dropplets of water indicating they are fresh and recently washed. The image emphasizes the cleanliness and appetizing nature of the food", "Keywords": ["studio shot","green","fruit","red","apple","stock image","health food","appetizing","empty background","grocery","food","snack"]}```
-</EXAMPLE> """
+Use ENGLISH only. Generate ONLY a JSON object with the keys Description and Keywords as follows {"Description": str, "Keywords": []}"""
         
 
         self.image_extensions = {
@@ -391,12 +423,11 @@ class LLMProcessor:
         self.requests = requests
         self.api_password = config.api_password
         self.max_tokens = config.gen_count
-        self.temperature = 0.1
-        self.top_p = 1
-        self.rep_pen = 1
-        self.top_k = 0
-        self.min_p = 1.05
-        
+        self.temperature = config.temperature
+        self.top_p = config.top_p
+        self.rep_pen = config.rep_pen
+        self.top_k = config.top_k
+        self.min_p = config.min_p
 
     def describe_content(self, task="", processed_image=None):
         if not processed_image:
@@ -441,7 +472,8 @@ class LLMProcessor:
                 "temperature": self.temperature,
                 "top_p": self.top_p,
                 "top_k": self.top_k,
-                "min_p": self.min_p
+                "min_p": self.min_p,
+                "rep_pen": self.rep_pen
             }
             
             endpoint = f"{self.api_url}/v1/chat/completions"
@@ -592,7 +624,7 @@ class FileProcessor:
         self.et = exiftool.ExifToolHelper(encoding='utf-8')
         
         # Words in the prompt tend to get repeated back by certain models
-        self.banned_words = ["no", "unspecified", "unknown", "standard", "unidentified", "time", "category", "actions", "setting", "objects", "visual", "elements", "activities", "appearance", "professions", "relationships", "identify", "photography", "photographic", "topiary"]
+        self.banned_words = ["no", "unspecified", "unknown", "unidentified", "identify", "topiary", "themes concepts", "items animals", "animals objects", "structures landmarks", "Foreground and background", "notable colors", "textures styles", "actions activities", "physical appearance", "Gender", "Age range", "visibly apparent", "apparent ancestry", "Occupation/role", "Relationships between individuals", "Emotions expressions", "body language"]
                 
         self.keyword_fields = [
             "Keywords",
@@ -955,7 +987,7 @@ class FileProcessor:
             
             # If retry didn't work, mark failed
             if not status == "success":
-                print(f"Failed: {file_path}")
+                print(f"failed: {file_path}")
                 self.callback(f"Retry failed: {file_path}")
                 self.callback(f"---")
                 metadata["XMP:Status"] = "failed"
@@ -981,7 +1013,7 @@ class FileProcessor:
             if not self.config.dry_run:
                 self.write_metadata(file_path, updated_metadata)
                 
-            print(f"{file_path}: {status}")
+            print(f"{status}: {file_path}")
             end_time = time.time()
             processing_time = end_time - start_time
             self.total_processing_time += processing_time

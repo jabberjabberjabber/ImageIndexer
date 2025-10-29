@@ -37,6 +37,7 @@ run_with_ai() {
             CONTEXTSIZE=$(jq -r '.contextsize' "$KOBOLD_ARGS_PATH")
             VISIONMAXRES=$(jq -r '.visionmaxres' "$KOBOLD_ARGS_PATH")
 			CHATCOMPLETIONSADAPTER=$(jq -r '.chatcompletionsadapter' "$KOBOLD_ARGS_PATH")
+			FLASHATTENTION=$(jq -r '.flashattention' "$KOBOLD_ARGS_PATH")
         else
             EXECUTABLE=$(python3 -c "import json; print(json.load(open('$KOBOLD_ARGS_PATH'))['executable'])")
             MODEL_PARAM=$(python3 -c "import json; print(json.load(open('$KOBOLD_ARGS_PATH'))['model_param'])")
@@ -44,20 +45,27 @@ run_with_ai() {
             CONTEXTSIZE=$(python3 -c "import json; print(json.load(open('$KOBOLD_ARGS_PATH'))['contextsize'])")
             VISIONMAXRES=$(python3 -c "import json; print(json.load(open('$KOBOLD_ARGS_PATH'))['visionmaxres'])")
 			CHATCOMPLETIONSADAPTER=$(python3 -c "import json; print(json.load(open('$KOBOLD_ARGS_PATH'))['chatcompletionsadapter'])")
+			FLASHATTENTION=$(python3 -c "import json; print(json.load(open('$KOBOLD_ARGS_PATH'))['flashattention'])")
 		fi
-        
+
         EXECUTABLE_PATH="$RESOURCES_DIR/$EXECUTABLE"
-        
+
         echo -e "${GREEN}Starting Indexer with AI support...${NC}"
         echo -e "${GRAY}Executable:${NC} ${WHITE}$EXECUTABLE_PATH${NC}"
-        
+
         # Set the working directory to the koboldcpp exec directory
         WORKING_DIR=$(dirname "$EXECUTABLE_PATH")
-        
+
         chmod +x "$EXECUTABLE_PATH"
-        
+
+        # Build command with conditional flashattention flag
+        FLASHATTENTION_FLAG=""
+        if [ "$FLASHATTENTION" = "true" ] || [ "$FLASHATTENTION" = "True" ]; then
+            FLASHATTENTION_FLAG="--flashattention"
+        fi
+
         # Start the process in the background
-        (cd "$WORKING_DIR" && "$EXECUTABLE_PATH" "$MODEL_PARAM" --mmproj "$MMPROJ" --contextsize "$CONTEXTSIZE" --visionmaxres "$VISIONMAXRES" --chatcompletionsadapter "$CHATCOMPLETIONSADAPTER") &
+        (cd "$WORKING_DIR" && "$EXECUTABLE_PATH" "$MODEL_PARAM" --mmproj "$MMPROJ" $FLASHATTENTION_FLAG --contextsize "$CONTEXTSIZE" --visionmaxres "$VISIONMAXRES" --chatcompletionsadapter "$CHATCOMPLETIONSADAPTER") &
         
         run_gui
     else

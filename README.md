@@ -6,7 +6,7 @@ A visual language model runs on your computer and is used to create captions and
 
 On your first run you will need to choose a model to run. Your system specs will be shown next to state of the art models. When you launch the indexer the model will be downloaded to the LLMII 'resources' directory. From that point the entire toolset is running completely locally.
 
-![Screenshot](./media/python_XTvoGxM9Da.gif)
+![Screenshot](./media/output.gif)
 
 ## Features
  
@@ -26,8 +26,6 @@ On your first run you will need to choose a model to run. Your system specs will
 ## Important Information
 
 It is recommended to have a discrete graphics processor in your machine.
-
-This tool verifies keywords and de-pluralizes them using rules that apply to English. Using it to generate keywords in other languages may have strange results.
 
 This tool operates directly on image file metadata. It will write to one or more of the following fields:
 

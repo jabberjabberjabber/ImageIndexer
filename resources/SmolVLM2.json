@@ -1,0 +1,9 @@
+{
+  "system_start": "<|im_start|>System: ",
+  "system_end": "<end_of_utterance>\n",
+  "user_start": "<|im_start|>User: ",
+  "user_end": "<end_of_utterance>\n",
+  "assistant_start": "<|im_start|>Assistant: ",
+  "assistant_gen": "Assistant:",
+  "assistant_end": "<end_of_utterance>\n"
+}

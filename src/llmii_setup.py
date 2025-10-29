@@ -7,10 +7,11 @@ from pathlib import Path
 import platform
 import requests
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QDialog, QVBoxLayout, QHBoxLayout, 
+    QApplication, QMainWindow, QDialog, QVBoxLayout, QHBoxLayout,
     QLabel, QRadioButton, QPushButton, QProgressBar, QMessageBox,
     QScrollArea, QWidget, QGroupBox, QFrame, QSizePolicy, QSpacerItem,
-    QMenuBar, QButtonGroup
+    QMenuBar, QButtonGroup, QLineEdit, QComboBox, QPlainTextEdit,
+    QSpinBox, QCheckBox
     )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize
 from PyQt6.QtGui import QFont, QColor, QPalette, QIcon
@@ -29,7 +30,11 @@ class GpuDetector:
         self.summary = {
             "cuda_available": False,
             "cuda_version": None,
+            "nvidia_devices": [],
+            "amd_available": False,
+            "amd_devices": [],
             "vulkan_available": False,
+            "vulkan_devices": [],
             "opencl_available": False,
             "total_vram_mb": 0,
             "recommended_backend": "CPU"
@@ -40,25 +45,42 @@ class GpuDetector:
         try:
             # Check for CUDA version
             output = subprocess.run(
-                ['nvidia-smi', '-q', '-d=compute'], 
+                ['nvidia-smi', '-q', '-d=compute'],
                 capture_output=True, text=True, check=True, encoding='utf-8'
             ).stdout
-            
+
             for line in output.splitlines():
                 if line.strip().startswith('CUDA'):
                     self.summary["cuda_version"] = line.split()[3]
                     self.summary["cuda_available"] = True
-            
-            # Get VRAM information
+
+            # Get detailed GPU information for all cards
             output = subprocess.run(
-                ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,noheader'], 
+                ['nvidia-smi', '--query-gpu=index,name,memory.total', '--format=csv,noheader,nounits'],
                 capture_output=True, text=True, check=True, encoding='utf-8'
             ).stdout
-            
-            vram_mb = int(output.strip().split()[0])
-            self.summary["total_vram_mb"] = vram_mb
-            
-            return True
+
+            nvidia_devices = []
+            total_vram = 0
+
+            for line in output.strip().splitlines():
+                parts = line.split(',')
+                if len(parts) >= 3:
+                    index = int(parts[0].strip())
+                    name = parts[1].strip()
+                    vram_mb = int(parts[2].strip())
+
+                    nvidia_devices.append({
+                        "index": index,
+                        "name": name,
+                        "vram_mb": vram_mb
+                    })
+                    total_vram += vram_mb
+
+            self.summary["nvidia_devices"] = nvidia_devices
+            self.summary["total_vram_mb"] = total_vram
+
+            return len(nvidia_devices) > 0
         except Exception as e:
             print(f"No NVIDIA GPU detected: {e}")
             return False
@@ -128,34 +150,37 @@ class GpuDetector:
         try:
             # Try rocminfo first
             output = subprocess.run(
-                ['rocminfo'], 
+                ['rocminfo'],
                 capture_output=True, text=True, check=True, encoding='utf-8'
             ).stdout
-            
+
             amd_devices = []
             current_device = None
-            
+            device_index = 0
+
             for line in output.splitlines():
                 line = line.strip()
                 if "Marketing Name:" in line:
                     name = line.split(":", 1)[1].strip()
-                    current_device = {"name": name}
+                    current_device = {"name": name, "index": device_index}
                 elif "Device Type:" in line and "GPU" in line and current_device:
                     # Current device is a GPU, keep it
                     amd_devices.append(current_device)
                     current_device = None
+                    device_index += 1
                 elif "Device Type:" in line and "GPU" not in line:
                     # Not a GPU, discard
                     current_device = None
-            
+
             # If we found AMD GPUs, try to get their VRAM
+            total_vram = 0
             if amd_devices:
                 try:
                     vram_info = subprocess.run(
-                        ['rocm-smi', '--showmeminfo', 'vram', '--csv'], 
+                        ['rocm-smi', '--showmeminfo', 'vram', '--csv'],
                         capture_output=True, text=True, check=True, encoding='utf-8'
                     ).stdout
-                    
+
                     # Parse CSV output for VRAM values
                     lines = vram_info.splitlines()
                     if len(lines) > 1:  # Skip header
@@ -164,18 +189,42 @@ class GpuDetector:
                                 try:
                                     vram_mb = int(line.split(",")[1].strip())
                                     amd_devices[i]["vram_mb"] = vram_mb
-                                    
-                                    # Update total VRAM if this is larger
-                                    if vram_mb > self.summary["total_vram_mb"]:
-                                        self.summary["total_vram_mb"] = vram_mb
+                                    total_vram += vram_mb
                                 except Exception:
                                     pass
                 except Exception as e:
                     print(f"Error getting AMD VRAM: {e}")
-            
+                    # Try alternative method using rocm-smi without CSV
+                    try:
+                        for i in range(len(amd_devices)):
+                            vram_info = subprocess.run(
+                                ['rocm-smi', '--device', str(i), '--showmeminfo', 'vram'],
+                                capture_output=True, text=True, check=True, encoding='utf-8'
+                            ).stdout
+                            # Parse for VRAM Total
+                            for line in vram_info.splitlines():
+                                if "VRAM Total Memory" in line or "Total Memory" in line:
+                                    # Extract number from line
+                                    parts = line.split()
+                                    for j, part in enumerate(parts):
+                                        if part.replace('.', '').isdigit() and j + 1 < len(parts):
+                                            vram_val = float(part)
+                                            unit = parts[j + 1].lower()
+                                            if 'gb' in unit or 'gib' in unit:
+                                                vram_mb = int(vram_val * 1024)
+                                            else:
+                                                vram_mb = int(vram_val)
+                                            amd_devices[i]["vram_mb"] = vram_mb
+                                            total_vram += vram_mb
+                                            break
+                    except Exception as e2:
+                        print(f"Error with alternative AMD VRAM detection: {e2}")
+
             if amd_devices:
                 self.summary["amd_available"] = True
                 self.summary["amd_devices"] = amd_devices
+                if total_vram > 0:
+                    self.summary["total_vram_mb"] = max(self.summary["total_vram_mb"], total_vram)
                 return True
             return False
         except Exception as e:
@@ -185,50 +234,76 @@ class GpuDetector:
     def detect_all(self):
         """Detect all GPU capabilities and determine recommended backend"""
 
-        self.summary["vulkan_devices"] = []
-        self.summary["amd_devices"] = []
-        
         # Try detecting in order of preference
         nvidia_detected = self.detect_nvidia_gpu()
         amd_detected = self.detect_amd_gpu()
         vulkan_detected = self.detect_vulkan()
-        
+
         if nvidia_detected and self.summary["total_vram_mb"] >= 3500:
             self.summary["recommended_backend"] = "CUDA"
         elif amd_detected and self.summary["total_vram_mb"] >= 3500:
-            self.summary["recommended_backend"] = "ROCm"
+            self.summary["recommended_backend"] = "Vulkan"
         elif vulkan_detected and self.summary["total_vram_mb"] >= 3500:
             self.summary["recommended_backend"] = "Vulkan"
         else:
             self.summary["recommended_backend"] = "CPU"
-        
-        print("GPU Detection Summary:")
-        print(f"  NVIDIA GPU detected: {nvidia_detected}")
-        print(f"  AMD GPU detected: {amd_detected}")
-        print(f"  Vulkan available: {vulkan_detected}")
-        print(f"  Total VRAM: {self.summary['total_vram_mb']} MB")
-        print(f"  Recommended backend: {self.summary['recommended_backend']}")
-        
+
+        # Print detailed summary
+        print("=" * 50)
+        print("GPU Detection Summary")
+        print("=" * 50)
+
+        if nvidia_detected:
+            print(f"\n✓ NVIDIA GPUs detected ({len(self.summary['nvidia_devices'])} card(s)):")
+            for gpu in self.summary['nvidia_devices']:
+                print(f"  [{gpu['index']}] {gpu['name']} - {gpu['vram_mb']} MB")
+            if self.summary["cuda_version"]:
+                print(f"  CUDA Version: {self.summary['cuda_version']}")
+
+        if amd_detected:
+            print(f"\n✓ AMD GPUs detected ({len(self.summary['amd_devices'])} card(s)):")
+            for gpu in self.summary['amd_devices']:
+                vram_str = f" - {gpu['vram_mb']} MB" if 'vram_mb' in gpu else ""
+                print(f"  [{gpu['index']}] {gpu['name']}{vram_str}")
+
+        if vulkan_detected:
+            print(f"\n✓ Vulkan devices available ({len(self.summary['vulkan_devices'])} device(s)):")
+            for gpu in self.summary['vulkan_devices']:
+                vram_str = f" - {gpu['vram_mb']} MB" if 'vram_mb' in gpu else ""
+                discrete = " (Discrete)" if gpu.get('is_discrete') else " (Integrated)"
+                print(f"  {gpu['name']}{vram_str}{discrete}")
+
+        if not nvidia_detected and not amd_detected and not vulkan_detected:
+            print("\n✗ No GPUs detected")
+
+        print(f"\nTotal VRAM: {self.summary['total_vram_mb']} MB")
+        print(f"Recommended backend: {self.summary['recommended_backend']}")
+        print("=" * 50)
+
         return self.summary
 
 
 def is_display_available():
-    """Try to create a QT application to test for display presence"""
+    """Check if a display/GUI is available without creating duplicate QApplication instances"""
     try:
-        
+        # On non-Windows, check for DISPLAY environment variable
         if os.name != 'nt' and not os.environ.get('DISPLAY'):
             return False
-        
+
         from PyQt6.QtWidgets import QApplication
-        import sys
-        
+
+        # If a QApplication instance already exists, display is available
         if QApplication.instance() is not None:
             return True
-            
-        test_app = QApplication(sys.argv)
-        test_app.quit()
-        return True
-        
+
+        # Try to import Qt GUI components - if this fails, no display
+        try:
+            from PyQt6.QtGui import QGuiApplication
+            # Don't create an instance, just check if we can import
+            return True
+        except ImportError:
+            return False
+
     except Exception as e:
         print(f"No display. Proceeding in terminal: {e}")
         return False
@@ -437,6 +512,82 @@ def list_models_terminal():
         print(f"Error loading models: {e}")
         return 1
 
+def add_model_terminal():
+    """Add a custom model in terminal mode"""
+    print("=" * 50)
+    print("Add Custom Model")
+    print("=" * 50)
+    print()
+
+    model_list_path = os.path.join(RESOURCES_DIR, "model_list.json")
+
+    try:
+        # Get model details from user
+        print("Enter model details:")
+        name = input("Model name: ").strip()
+        if not name:
+            print("Error: Model name is required")
+            return 1
+
+        lang_url = input("Language model URL (HuggingFace): ").strip()
+        if not lang_url:
+            print("Error: Language model URL is required")
+            return 1
+
+        mmproj_url = input("MMProj URL (HuggingFace): ").strip()
+        if not mmproj_url:
+            print("Error: MMProj URL is required")
+            return 1
+
+        print("\nAvailable adapters: chatml, gemma-3, mistral")
+        adapter = input("Adapter type (default: chatml): ").strip() or "chatml"
+        if adapter not in ["chatml", "gemma-3", "mistral"]:
+            print(f"Warning: '{adapter}' is not a standard adapter. Using anyway.")
+
+        description = input("Description (optional): ").strip() or "Custom model"
+
+        size_mb_str = input("Size in MB (default: 3000): ").strip() or "3000"
+        try:
+            size_mb = int(size_mb_str)
+        except ValueError:
+            print("Invalid size. Using default 3000 MB")
+            size_mb = 3000
+
+        flash_input = input("Enable flash attention? (y/n, default: y): ").strip().lower()
+        flashattention = flash_input != 'n'
+
+        # Create model data
+        new_model = {
+            "model": name,
+            "config": name.lower().replace(" ", "-") + ".kcpps",
+            "language_url": lang_url,
+            "mmproj_url": mmproj_url,
+            "description": description,
+            "size_mb": size_mb,
+            "adapter": adapter,
+            "flashattention": flashattention
+        }
+
+        # Load existing models
+        with open(model_list_path, 'r') as f:
+            models = json.load(f)
+
+        # Add new model
+        models.append(new_model)
+
+        # Save updated list
+        with open(model_list_path, 'w') as f:
+            json.dump(models, f, indent=4)
+
+        print()
+        print(f"✓ Successfully added '{name}' to the model list!")
+        print(f"  Saved to: {model_list_path}")
+        return 0
+
+    except Exception as e:
+        print(f"Error adding model: {e}")
+        return 1
+
 def run_detection_terminal():
     """Run GPU detection in terminal mode"""
     detector = GpuDetector()
@@ -448,28 +599,33 @@ def setup_koboldcpp_terminal(model, gpu_summary):
     executable_path = gpu_summary["executable_path"]
     full_command_path = os.path.join(RESOURCES_DIR, "kobold_command.txt")
     args_path = os.path.join(RESOURCES_DIR, "kobold_args.json")
-    
+
+    # Get flashattention setting from model, default to False if not specified
+    use_flashattention = model.get("flashattention", False)
+
     kobold_args = {
         "executable": os.path.basename(executable_path),
         "model_param": model["language_url"],
         "mmproj": model["mmproj_url"],
-        "flashattention": "",
+        "flashattention": use_flashattention,
         "contextsize": "4096",
         "visionmaxres": "9999",
         "chatcompletionsadapter": model["adapter"]
     }
-    
-    full_command = f"{executable_path} {kobold_args['model_param']} --mmproj {kobold_args['mmproj']} --flashattention --contextsize {kobold_args['contextsize']} --visionmaxres 9999 --chatcompletionsadapter {kobold_args['chatcompletionsadapter']}"
-    
+
+    # Build command with conditional flashattention flag
+    flashattention_flag = "--flashattention " if use_flashattention else ""
+    full_command = f"{executable_path} {kobold_args['model_param']} --mmproj {kobold_args['mmproj']} {flashattention_flag}--contextsize {kobold_args['contextsize']} --visionmaxres 9999 --chatcompletionsadapter {kobold_args['chatcompletionsadapter']}"
+
     try:
         with open(full_command_path, "w") as f:
             f.write(full_command)
-        
+
         with open(args_path, "w") as f:
             json.dump(kobold_args, f, indent=4)
-        
+
         return True
-        
+
     except Exception as e:
         print(f"Failed to create configuration: {e}")
         return False
@@ -567,6 +723,148 @@ def setup_terminal(update=False, model_name=None):
         print("Setup failed")
         return 1
 
+class AddModelDialog:
+    """Dialog for adding a custom model to the model list"""
+    def __init__(self, parent=None):
+        self.dialog = QDialog(parent)
+        self.dialog.setWindowTitle("Add Custom Model")
+        self.dialog.setMinimumWidth(600)
+        self.dialog.setMinimumHeight(500)
+        self.model_data = None
+
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QVBoxLayout()
+
+        header = QLabel("<h2>Add Custom Model</h2>")
+        layout.addWidget(header)
+
+        info_label = QLabel("Enter the HuggingFace URLs and details for your custom model:")
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+
+        # Scroll area for form
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        form_container = QWidget()
+        form_layout = QVBoxLayout()
+
+        # Model name
+        name_layout = QHBoxLayout()
+        name_layout.addWidget(QLabel("Model Name:"))
+        self.name_input = QLineEdit()
+        self.name_input.setPlaceholderText("e.g., Qwen2-VL 3B (6bit)")
+        name_layout.addWidget(self.name_input)
+        form_layout.addLayout(name_layout)
+
+        # Language model URL
+        lang_url_layout = QVBoxLayout()
+        lang_url_layout.addWidget(QLabel("Language Model URL (HuggingFace):"))
+        self.lang_url_input = QLineEdit()
+        self.lang_url_input.setPlaceholderText("https://huggingface.co/user/repo/blob/main/model.gguf")
+        lang_url_layout.addWidget(self.lang_url_input)
+        form_layout.addLayout(lang_url_layout)
+
+        # MMProj URL
+        mmproj_url_layout = QVBoxLayout()
+        mmproj_url_layout.addWidget(QLabel("MMProj URL (HuggingFace):"))
+        self.mmproj_url_input = QLineEdit()
+        self.mmproj_url_input.setPlaceholderText("https://huggingface.co/user/repo/blob/main/mmproj-model.gguf")
+        mmproj_url_layout.addWidget(self.mmproj_url_input)
+        form_layout.addLayout(mmproj_url_layout)
+
+        # Adapter type
+        adapter_layout = QHBoxLayout()
+        adapter_layout.addWidget(QLabel("Adapter Type:"))
+        self.adapter_combo = QComboBox()
+        self.adapter_combo.addItems(["chatml", "gemma-3", "mistral"])
+        adapter_layout.addWidget(self.adapter_combo)
+        adapter_layout.addStretch()
+        form_layout.addLayout(adapter_layout)
+
+        # Description
+        desc_layout = QVBoxLayout()
+        desc_layout.addWidget(QLabel("Description:"))
+        self.desc_input = QPlainTextEdit()
+        self.desc_input.setPlaceholderText("Brief description of the model...")
+        self.desc_input.setMaximumHeight(80)
+        desc_layout.addWidget(self.desc_input)
+        form_layout.addLayout(desc_layout)
+
+        # Size in MB
+        size_layout = QHBoxLayout()
+        size_layout.addWidget(QLabel("Size (MB):"))
+        self.size_spinbox = QSpinBox()
+        self.size_spinbox.setMinimum(100)
+        self.size_spinbox.setMaximum(50000)
+        self.size_spinbox.setValue(3000)
+        self.size_spinbox.setSingleStep(100)
+        size_layout.addWidget(self.size_spinbox)
+        size_layout.addStretch()
+        form_layout.addLayout(size_layout)
+
+        # Flash attention
+        flash_layout = QHBoxLayout()
+        self.flash_checkbox = QCheckBox("Enable Flash Attention")
+        self.flash_checkbox.setChecked(True)
+        flash_layout.addWidget(self.flash_checkbox)
+        flash_layout.addStretch()
+        form_layout.addLayout(flash_layout)
+
+        form_container.setLayout(form_layout)
+        scroll_area.setWidget(form_container)
+        layout.addWidget(scroll_area)
+
+        # Buttons
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+
+        cancel_button = QPushButton("Cancel")
+        cancel_button.clicked.connect(self.dialog.reject)
+
+        add_button = QPushButton("Add Model")
+        add_button.clicked.connect(self.accept_model)
+        add_button.setDefault(True)
+
+        button_layout.addWidget(cancel_button)
+        button_layout.addWidget(add_button)
+
+        layout.addLayout(button_layout)
+        self.dialog.setLayout(layout)
+
+    def accept_model(self):
+        """Validate and accept the model data"""
+        # Validation
+        if not self.name_input.text().strip():
+            QMessageBox.warning(self.dialog, "Validation Error", "Model name is required.")
+            return
+
+        if not self.lang_url_input.text().strip():
+            QMessageBox.warning(self.dialog, "Validation Error", "Language model URL is required.")
+            return
+
+        if not self.mmproj_url_input.text().strip():
+            QMessageBox.warning(self.dialog, "Validation Error", "MMProj URL is required.")
+            return
+
+        # Create model data
+        self.model_data = {
+            "model": self.name_input.text().strip(),
+            "config": self.name_input.text().strip().lower().replace(" ", "-") + ".kcpps",
+            "language_url": self.lang_url_input.text().strip(),
+            "mmproj_url": self.mmproj_url_input.text().strip(),
+            "description": self.desc_input.toPlainText().strip() or "Custom model",
+            "size_mb": self.size_spinbox.value(),
+            "adapter": self.adapter_combo.currentText(),
+            "flashattention": self.flash_checkbox.isChecked()
+        }
+
+        self.dialog.accept()
+
+    def exec(self):
+        return self.dialog.exec()
+
 class ModelSelectionDialog:
     """Dialog for selecting a model based on available VRAM"""
     def __init__(self, models, gpu_summary, parent=None):
@@ -590,16 +888,37 @@ class ModelSelectionDialog:
         
         gpu_info_box = QGroupBox("GPU Information")
         gpu_info_layout = QVBoxLayout()
-        
-        if self.gpu_summary["recommended_backend"] != "CPU":    
-            vram_info = QLabel(f"VRAM: {self.gpu_summary['total_vram_mb']} MB total")
-            backend_info = QLabel(f"Recommended backend: {self.gpu_summary['recommended_backend']}")
+
+        if self.gpu_summary["recommended_backend"] != "CPU":
+            # Show NVIDIA GPUs
+            if self.gpu_summary.get("nvidia_devices"):
+                nvidia_label = QLabel(f"<b>NVIDIA GPUs ({len(self.gpu_summary['nvidia_devices'])} card(s)):</b>")
+                gpu_info_layout.addWidget(nvidia_label)
+                for gpu in self.gpu_summary["nvidia_devices"]:
+                    gpu_detail = QLabel(f"  [{gpu['index']}] {gpu['name']} - {gpu['vram_mb']} MB")
+                    gpu_info_layout.addWidget(gpu_detail)
+                if self.gpu_summary.get("cuda_version"):
+                    cuda_label = QLabel(f"  CUDA: {self.gpu_summary['cuda_version']}")
+                    gpu_info_layout.addWidget(cuda_label)
+
+            # Show AMD GPUs
+            if self.gpu_summary.get("amd_devices"):
+                amd_label = QLabel(f"<b>AMD GPUs ({len(self.gpu_summary['amd_devices'])} card(s)):</b>")
+                gpu_info_layout.addWidget(amd_label)
+                for gpu in self.gpu_summary["amd_devices"]:
+                    vram_str = f" - {gpu['vram_mb']} MB" if 'vram_mb' in gpu else ""
+                    gpu_detail = QLabel(f"  [{gpu['index']}] {gpu['name']}{vram_str}")
+                    gpu_info_layout.addWidget(gpu_detail)
+
+            # Show total VRAM and backend
+            vram_info = QLabel(f"<b>Total VRAM:</b> {self.gpu_summary['total_vram_mb']} MB")
+            backend_info = QLabel(f"<b>Recommended backend:</b> {self.gpu_summary['recommended_backend']}")
             gpu_info_layout.addWidget(vram_info)
             gpu_info_layout.addWidget(backend_info)
         else:
             no_gpu_info = QLabel("No compatible GPU detected. Models will run on CPU only.")
             gpu_info_layout.addWidget(no_gpu_info)
-            
+
         gpu_info_box.setLayout(gpu_info_layout)
         
         scroll_area = QScrollArea()
@@ -651,15 +970,20 @@ class ModelSelectionDialog:
         scroll_area.setWidget(model_container)
         
         button_layout = QHBoxLayout()
+
+        add_model_button = QPushButton("Add Custom Model")
+        add_model_button.clicked.connect(self.add_custom_model)
+        button_layout.addWidget(add_model_button)
+
         button_layout.addStretch()
-        
+
         cancel_button = QPushButton("Cancel")
         cancel_button.clicked.connect(self.dialog.reject)
-        
+
         select_button = QPushButton("Select")
         select_button.clicked.connect(self.accept_selection)
         select_button.setDefault(True)
-        
+
         button_layout.addWidget(cancel_button)
         button_layout.addWidget(select_button)
         
@@ -672,9 +996,42 @@ class ModelSelectionDialog:
         
         self.dialog.setLayout(layout)
     
+    def add_custom_model(self):
+        """Open dialog to add a custom model"""
+        add_dialog = AddModelDialog(self.dialog)
+        if add_dialog.exec():
+            new_model = add_dialog.model_data
+            if new_model:
+                # Save to model_list.json
+                model_list_path = os.path.join(RESOURCES_DIR, "model_list.json")
+                try:
+                    # Load existing models
+                    with open(model_list_path, 'r') as f:
+                        models = json.load(f)
+
+                    # Add new model
+                    models.append(new_model)
+
+                    # Save updated list
+                    with open(model_list_path, 'w') as f:
+                        json.dump(models, f, indent=4)
+
+                    QMessageBox.information(
+                        self.dialog,
+                        "Model Added",
+                        f"Successfully added '{new_model['model']}' to the model list.\n\n"
+                        "Please restart the setup to see the new model."
+                    )
+                except Exception as e:
+                    QMessageBox.critical(
+                        self.dialog,
+                        "Error",
+                        f"Failed to save model to list: {e}"
+                    )
+
     def exec(self):
         return self.dialog.exec()
-    
+
     def accept_selection(self):
         for i, radio in enumerate(self.radio_buttons):
             if radio.isChecked():
@@ -783,28 +1140,34 @@ class SetupApp:
         executable_path = gpu_summary["executable_path"]
         full_command_path = os.path.join(RESOURCES_DIR, "kobold_command.txt")
         args_path = os.path.join(RESOURCES_DIR, "kobold_args.json")
-        
+
+        # Get flashattention setting from model, default to False if not specified
+        use_flashattention = model.get("flashattention", False)
+
         kobold_args = {
             "executable": os.path.basename(executable_path),
             "model_param": model["language_url"],
             "mmproj": model["mmproj_url"],
-            "flashattention": "",
+            "flashattention": use_flashattention,
             "contextsize": "4096",
             "visionmaxres": "9999",
             "chatcompletionsadapter": model["adapter"]
         }
-        full_command = f"{executable_path} {kobold_args['model_param']} --mmproj {kobold_args['mmproj']} --contextsize {kobold_args['contextsize']} --visionmaxres 9999 --chatcompletionsadapter {kobold_args['chatcompletionsadapter']}" 
-        
+
+        # Build command with conditional flashattention flag
+        flashattention_flag = "--flashattention " if use_flashattention else ""
+        full_command = f"{executable_path} {kobold_args['model_param']} --mmproj {kobold_args['mmproj']} {flashattention_flag}--contextsize {kobold_args['contextsize']} --visionmaxres 9999 --chatcompletionsadapter {kobold_args['chatcompletionsadapter']}"
+
         try:
             with open(full_command_path, "w") as f:
                 f.write(full_command)
-            
+
             with open(args_path, "w") as f:
                 json.dump(kobold_args, f, indent=4)
-            
+
             print(f"Setup completed. Run commands located at: {args_path}")
-            return 
-            
+            return
+
         except Exception as e:
             QMessageBox.critical(None, "Error", f"Failed: {e}")
             return False
@@ -851,17 +1214,21 @@ def main():
     parser.add_argument("--model", type=str, help="Specify model name for terminal mode")
     parser.add_argument("--detect-only", action="store_true", help="Only run GPU detection and exit")
     parser.add_argument("--list-models", action="store_true", help="List available models and exit")
-    
+    parser.add_argument("--add-model", action="store_true", help="Add a custom model to the model list")
+
     args = parser.parse_args()
-    
+
     if args.list_models:
         list_models_terminal()
         return 0
-    
+
     if args.detect_only:
         run_detection_terminal()
         return 0
-    
+
+    if args.add_model:
+        return add_model_terminal()
+
     if args.force_terminal or not is_display_available():
         return setup_terminal(args.update, args.model)
     else:

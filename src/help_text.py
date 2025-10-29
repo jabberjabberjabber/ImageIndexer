@@ -23,7 +23,14 @@ SETTINGS_HELP = """
 <p><b>GenTokens:</b> Maximum number of tokens to generate in response. These are tokens, not words. Fewer tokens means faster processing per generation but may lead to more retries because the model may get cut off mid generation. More is not necessarily better though. Optimal range is between 150 and 300.</p>
 
 <h3>Image Options</h3>
-<p><b>Dimension length:</b> The maximum length of a horizontal or vertical dimension of the image, in pixels. Setting this higher will not necessarily result in better generations. Larger image sizes can take more memory and can lead to much slower processing. It is recommended to keep this between 392 and 896.<p> 
+<p><b>Dimension length:</b> The maximum length of a horizontal or vertical dimension of the image, in pixels. Setting this higher will not necessarily result in better generations. Larger image sizes can take more memory and can lead to much slower processing. It is recommended to keep this between 392 and 896.</p> 
+
+<h3>Sampler Options</h3>
+<p><b>Temperature:</b> The randomness of the model output. Between 0.0 and 2.0</p>
+<p><b>top_p:</b> Chooses from the smallest set of tokens which have a probability exceeding p. <i>Off = 1.0</i></p>
+<p><b>top_k:</b> Limits to the most likely k tokens. <i>Off = 0</i></p>
+<p><b>min_p:</b> Blocks tokens with probability lower than p. <i>Off = 0.0</i></p>
+<p><b>rep_pen:</b> Prevents repetition. May cause erratic behavior. <i>Off = 1.0</i></p>
 
 <h3>File Options</h3>
 <p><b>Don't go in subdirectories:</b> Only process images in the main directory, don't look inside others.</p>

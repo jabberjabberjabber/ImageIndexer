@@ -33,6 +33,11 @@ function Run-WithAI {
                 "--visionmaxres", $koboldArgs.visionmaxres,
 				"--chatcompletionsadapter", $koboldArgs.chatcompletionsadapter
             )
+
+            # Add flashattention flag if enabled
+            if ($koboldArgs.flashattention -eq $true) {
+                $commandArgs += "--flashattention"
+            }
             
             Write-Host "Starting Indexer with AI support..." -ForegroundColor Green
             Write-Host "Executable: " -NoNewline -ForegroundColor Gray

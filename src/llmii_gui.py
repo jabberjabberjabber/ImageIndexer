@@ -6,12 +6,12 @@ import base64
 import requests
 
 from PyQt6.QtCore import QThread, pyqtSignal, QObject, Qt, QSize
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-                           QLabel, QLineEdit, QCheckBox, QPushButton, QFileDialog, 
-                           QTextEdit, QGroupBox, QSpinBox, QRadioButton, QButtonGroup,
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+                           QLabel, QLineEdit, QCheckBox, QPushButton, QFileDialog,
+                           QTextEdit, QGroupBox, QSpinBox, QDoubleSpinBox, QRadioButton, QButtonGroup,
                            QProgressBar, QTableWidget, QTableWidgetItem, QComboBox,
                            QPlainTextEdit, QScrollArea, QMessageBox, QDialog, QMenuBar,
-                           QMenu, QSizePolicy, QSplitter, QFrame, QPushButton, QFrame, 
+                           QMenu, QSizePolicy, QSplitter, QFrame, QPushButton, QFrame,
                            QSizePolicy, QSpacerItem)
 
 
@@ -58,36 +58,32 @@ class GuiConfig:
     FILENAME_LABEL_HEIGHT = 20
     CAPTION_BOX_HEIGHT = 200
     KEYWORDS_BOX_HEIGHT = abs(METADATA_HEIGHT - (FILENAME_LABEL_HEIGHT + CAPTION_BOX_HEIGHT))
-    DEFAULT_INSTRUCTION = """The tasks are to describe the image and to come up with a large set of keyword tags for it.
+    DEFAULT_INSTRUCTION = """Return a JSON object containing a Description for the image and a list of Keywords.
 
 Write the Description using the active voice.
 
-The Keywords must be one or two words each. Generate as many Keywords as possible using a controlled and consistent vocabulary.
+Generate 5 to 10 Keywords. Each Keyword is an item in a list and will be composed of a maximum of two words.
 
 For both Description and Keywords, make sure to include:
 
  - Themes, concepts
  - Items, animals, objects
  - Structures, landmarks, setting
- - Foreground and background elements   
+ - Foreground and background elements
  - Notable colors, textures, styles
  - Actions, activities
 
-If humans are present, include: 
+If humans are present, include:
  - Physical appearance
  - Gender
- - Clothing 
+ - Clothing
  - Age range
  - Visibly apparent ancestry
  - Occupation/role
  - Relationships between individuals
  - Emotions, expressions, body language
 
-Use ENGLISH only. Generate ONLY a JSON object with the keys Description and Keywords as follows {"Description": str, "Keywords": []}
-<EXAMPLE>
-The example input would be a stock photo of two apples, one red and one green, against a white backdrop and is a hypothetical Description and Keyword for a non-existent image.
-OUTPUT=```json{"Description": "Two apples next to each other, one green and one red, placed side by side against a white background. There is even and diffuse studio lighting. The fruit is glossy and covered with dropplets of water indicating they are fresh and recently washed. The image emphasizes the cleanliness and appetizing nature of the food", "Keywords": ["studio shot","green","fruit","red","apple","stock image","health food","appetizing","empty background","grocery","food","snack"]}```
-</EXAMPLE> """
+Use ENGLISH only. Generate ONLY a JSON object with the keys Description and Keywords as follows {"Description": str, "Keywords": []}"""
                 
 class InstructionDialog(QDialog):
     def __init__(self, instruction_text, parent=None):
@@ -169,7 +165,7 @@ class SettingsDialog(QDialog):
         scroll_layout.addLayout(api_layout)
 
         system_instruction_layout = QHBoxLayout()
-        self.system_instruction_input = QLineEdit("You describe the image and generate keywords.")
+        self.system_instruction_input = QLineEdit("You are a helpful assistant.")
         system_instruction_layout.addWidget(QLabel("System Instruction:"))
         system_instruction_layout.addWidget(self.system_instruction_input)
         scroll_layout.addLayout(system_instruction_layout)
@@ -225,7 +221,77 @@ class SettingsDialog(QDialog):
         res_limit_layout.addWidget(QLabel("Dimension length: "))
         res_limit_layout.addWidget(self.res_limit)
         scroll_layout.addLayout(res_limit_layout)
-        
+
+        # Sampler Settings Group
+        sampler_group = QGroupBox("Sampler Settings")
+        sampler_layout = QVBoxLayout()
+
+        # Temperature
+        temp_layout = QHBoxLayout()
+        self.temperature_spinbox = QDoubleSpinBox()
+        self.temperature_spinbox.setMinimum(0.0)
+        self.temperature_spinbox.setMaximum(2.0)
+        self.temperature_spinbox.setValue(0.2)
+        self.temperature_spinbox.setSingleStep(0.05)
+        self.temperature_spinbox.setDecimals(2)
+        temp_layout.addWidget(QLabel("Temperature:"))
+        temp_layout.addWidget(self.temperature_spinbox)
+        temp_layout.addStretch()
+        sampler_layout.addLayout(temp_layout)
+
+        # Top P
+        top_p_layout = QHBoxLayout()
+        self.top_p_spinbox = QDoubleSpinBox()
+        self.top_p_spinbox.setMinimum(0.0)
+        self.top_p_spinbox.setMaximum(1.0)
+        self.top_p_spinbox.setValue(1.0)
+        self.top_p_spinbox.setSingleStep(0.01)
+        self.top_p_spinbox.setDecimals(2)
+        top_p_layout.addWidget(QLabel("Top P:"))
+        top_p_layout.addWidget(self.top_p_spinbox)
+        top_p_layout.addStretch()
+        sampler_layout.addLayout(top_p_layout)
+
+        # Top K
+        top_k_layout = QHBoxLayout()
+        self.top_k_spinbox = QSpinBox()
+        self.top_k_spinbox.setMinimum(0)
+        self.top_k_spinbox.setMaximum(100)
+        self.top_k_spinbox.setValue(100)
+        top_k_layout.addWidget(QLabel("Top K:"))
+        top_k_layout.addWidget(self.top_k_spinbox)
+        top_k_layout.addStretch()
+        sampler_layout.addLayout(top_k_layout)
+
+        # Min P
+        min_p_layout = QHBoxLayout()
+        self.min_p_spinbox = QDoubleSpinBox()
+        self.min_p_spinbox.setMinimum(0.0)
+        self.min_p_spinbox.setMaximum(2.0)
+        self.min_p_spinbox.setValue(0.05)
+        self.min_p_spinbox.setSingleStep(0.01)
+        self.min_p_spinbox.setDecimals(2)
+        min_p_layout.addWidget(QLabel("Min P:"))
+        min_p_layout.addWidget(self.min_p_spinbox)
+        min_p_layout.addStretch()
+        sampler_layout.addLayout(min_p_layout)
+
+        # Repetition Penalty
+        rep_pen_layout = QHBoxLayout()
+        self.rep_pen_spinbox = QDoubleSpinBox()
+        self.rep_pen_spinbox.setMinimum(1.0)
+        self.rep_pen_spinbox.setMaximum(2.0)
+        self.rep_pen_spinbox.setValue(1.01)
+        self.rep_pen_spinbox.setSingleStep(0.01)
+        self.rep_pen_spinbox.setDecimals(2)
+        rep_pen_layout.addWidget(QLabel("Repetition Penalty:"))
+        rep_pen_layout.addWidget(self.rep_pen_spinbox)
+        rep_pen_layout.addStretch()
+        sampler_layout.addLayout(rep_pen_layout)
+
+        sampler_group.setLayout(sampler_layout)
+        scroll_layout.addWidget(sampler_group)
+
         options_group = QGroupBox("File Options")
         options_layout = QVBoxLayout()
         
@@ -269,7 +335,7 @@ class SettingsDialog(QDialog):
         corrections_layout = QVBoxLayout()
         
         self.depluralize_checkbox = QCheckBox("Depluralize keywords")
-        self.depluralize_checkbox.setChecked(True)
+        self.depluralize_checkbox.setChecked(False)
         self.word_limit_layout = QHBoxLayout()
         self.word_limit_checkbox = QCheckBox("Limit to")
         self.word_limit_spinbox = QSpinBox()
@@ -370,15 +436,22 @@ class SettingsDialog(QDialog):
                 self.update_caption_checkbox.setChecked(settings.get('update_caption', False))
                 
                 # Load keyword correction settings
-                self.depluralize_checkbox.setChecked(settings.get('depluralize_keywords', True))
+                self.depluralize_checkbox.setChecked(settings.get('depluralize_keywords', False))
                 self.word_limit_checkbox.setChecked(settings.get('limit_word_count', True))
                 self.word_limit_spinbox.setValue(settings.get('max_words_per_keyword', 2))
                 self.split_and_checkbox.setChecked(settings.get('split_and_entries', True))
                 self.ban_prompt_words_checkbox.setChecked(settings.get('ban_prompt_words', True))
                 self.no_digits_start_checkbox.setChecked(settings.get('no_digits_start', True))
                 self.min_word_length_checkbox.setChecked(settings.get('min_word_length', True))
-                self.latin_only_checkbox.setChecked(settings.get('latin_only', True))    
-        
+                self.latin_only_checkbox.setChecked(settings.get('latin_only', True))
+
+                # Load sampler settings
+                self.temperature_spinbox.setValue(settings.get('temperature', 0.2))
+                self.top_p_spinbox.setValue(settings.get('top_p', 1.0))
+                self.top_k_spinbox.setValue(settings.get('top_k', 100))
+                self.min_p_spinbox.setValue(settings.get('min_p', 0.05))
+                self.rep_pen_spinbox.setValue(settings.get('rep_pen', 1.01))
+
         except Exception as e:
             print(f"Error loading settings: {e}")
             
@@ -413,6 +486,11 @@ class SettingsDialog(QDialog):
             'no_digits_start': self.no_digits_start_checkbox.isChecked(),
             'min_word_length': self.min_word_length_checkbox.isChecked(),
             'latin_only': self.latin_only_checkbox.isChecked(),
+            'temperature': self.temperature_spinbox.value(),
+            'top_p': self.top_p_spinbox.value(),
+            'top_k': self.top_k_spinbox.value(),
+            'min_p': self.min_p_spinbox.value(),
+            'rep_pen': self.rep_pen_spinbox.value(),
         }
         
         try:
@@ -1023,7 +1101,15 @@ class ImageIndexerGUI(QMainWindow):
         config.update_keywords = self.settings_dialog.update_keywords_checkbox.isChecked()
         config.update_caption = self.settings_dialog.update_caption_checkbox.isChecked()
         config.gen_count = self.settings_dialog.gen_count.value()
-        config.res_limit = self.settings_dialog.res_limit.value()     
+        config.res_limit = self.settings_dialog.res_limit.value()
+
+        # Load sampler settings
+        config.temperature = self.settings_dialog.temperature_spinbox.value()
+        config.top_p = self.settings_dialog.top_p_spinbox.value()
+        config.top_k = self.settings_dialog.top_k_spinbox.value()
+        config.min_p = self.settings_dialog.min_p_spinbox.value()
+        config.rep_pen = self.settings_dialog.rep_pen_spinbox.value()
+
         self.indexer_thread = IndexerThread(config)
         self.indexer_thread.output_received.connect(self.update_output)
         self.indexer_thread.image_processed.connect(self.update_image_preview)
