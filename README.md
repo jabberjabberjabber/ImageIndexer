@@ -4,7 +4,7 @@ LLMII uses a local AI to label metadata and index images. It does not rely on a 
 
 A visual language model runs on your computer and is used to create captions and keywords for images in a directory tree. The generated information is then added to each image file's metadata or to a sidecar file. The images can then be indexed, searched, and organized by by their descriptions using any tool you like that can access the common metadata fields. The files themselves are not bound to any location or tied to any software and the indexer can be run any number of times on the same collection in order to add more metadata or process new images. 
 
-The first time you launch the tool you will be presented with a list of AI models to choose from. The chosen model will be downloaded to your device everything will take place locally using your computer to run the AI which will read the images and produce the metadata. Once the model weights and dependencies are installed then the tool and all of its components will operate locally.
+The first time you launch the tool you will be presented with a list of AI models to choose from. Once the model weights are downloaded and the dependencies are installed then the tool and all of its components will operate locally.
   
 ![Screenshot](./media/python_HcTJ5w15oq.png)
 
