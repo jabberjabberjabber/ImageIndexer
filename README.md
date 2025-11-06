@@ -2,10 +2,10 @@
 
 LLMII uses a local AI to label metadata and index images. It does not rely on a cloud service or database.
 
-A visual language model runs on your computer and is used to create captions and keywords for images in a directory tree. The generated information is then added to each image file's metadata. The images can then be indexed, searched, and organized by by their descriptions using any tool you like that can access the common metadata fields. The files themselves can be moved, renamed, copied, and edited without affecting the metadata.
+A visual language model runs on your computer and is used to create captions and keywords for images in a directory tree. The generated information is then added to each image file's metadata or to a sidecar file. The images can then be indexed, searched, and organized by by their descriptions using any tool you like that can access the common metadata fields. The files themselves are not bound to any location or tied to any software and the indexer can be run any number of times on the same collection in order to add more metadata or process new images. 
 
-On your first run you will need to choose a model to run. Your system specs will be shown next to state of the art models. When you launch the indexer the model will be downloaded to the LLMII 'resources' directory. From that point the entire toolset is running completely locally.
-
+The first time you launch the tool you will be presented with a list of AI models to choose from. The chosen model will be downloaded to your device everything will take place locally using your computer to run the AI which will read the images and produce the metadata. Once the model weights and dependencies are installed then the tool and all of its components will operate locally.
+  
 ![Screenshot](./media/python_HcTJ5w15oq.png)
 
 ## Features
@@ -15,13 +15,15 @@ On your first run you will need to choose a model to run. Your system specs will
 - **Local Processing**: All processing is done locally on your machine
 - **Multi-Format Support**: Handles a wide range of image formats, including all major raw camera files
 - **User-Friendly GUI**: Includes a GUI and installer. Relies on Koboldcpp, a single executable, for all AI functionality
+- **Image View**: View images step through them to review the metadata generation after they are processed
 - **Simple Model Selection**: Choose a the state of the art model and it will be automatically downloaded and configured
 - **Completely Automatic Backend Configuration**: The AI backend (KoboldCpp) will be downloaded and configured with optimal settings  
 - **GPU Acceleration**: Will use Apple Metal, Nvidia CUDA, or AMD (Vulkan) hardware if available to greatly speed inference
 - **Cross-Platform**: Supports Windows, macOS ARM, and Linux
 - **Stop and Start Capability**: Can stop and start without having to reprocess all the files again
-- **One or Two Step Processing**: Can do keywords and a simple caption in one step, or keywords and a detailed caption in two steps
+- **One or Two Step Processing**: Can do keywords and a simple caption in one step, or keywords and a detailed caption in two steps 
 - **Highly Configurable**: You are in control of everything
+- **Multiple Models**: You can choose a different model and run it again for additional keywords 
 
 ## Important Information
 
@@ -43,7 +45,6 @@ The "Status" and "Identifier" fields are used to track the processing state of i
 ### Prerequisites
 
 - Python 3.8 or higher
-- KoboldCPP
   
 ### Windows Installation
 
