@@ -3,6 +3,10 @@ from json_repair import repair_json as rj
 from datetime import timedelta
 from .image_processor import ImageProcessor
 from .llmii_utils import first_json, de_pluralize, AND_EXCEPTIONS
+
+class SkipDirectoryException(Exception):
+    """Exception raised to skip the current directory"""
+    pass
     
 def split_on_internal_capital(word):
     """ Split a word if it contains a capital letter after the 4th position.
@@ -153,6 +157,17 @@ def clean_string(data):
     if isinstance(data, dict):
         data = json.dumps(data)
     
+    # More than one think tag
+    #if len(data.split("<think>")) > 2:
+    #    return none
+        
+    # One think tag, remove everything before it.
+    if "<think>" in data:
+        data = data[data.index("<think>")+7:]
+    
+    # Remove everything after an end think tag
+    data = data.split("</think>")[0]
+    
     if isinstance(data, str):
         data = re.sub(r"\n", "", data)
         data = re.sub(r'["""]', '"', data)
@@ -164,6 +179,20 @@ def clean_string(data):
     
     return data
     
+
+def markdown_list_to_dict(text):
+    """ Searches a string for a markdown formatted
+        list, and if one is found, converts it to
+        a dict.
+    """
+    list_pattern = r"(?:^\s*[-*+]|\d+\.)\s*(.+)$"
+    list_items = re.findall(list_pattern, text, re.MULTILINE)
+
+    if list_items:
+        return {"Keywords": list_items}
+    else:
+        return None
+        
 def clean_json(data):
     """ LLMs like to return all sorts of garbage.
         Even when asked to give a structured output
@@ -240,6 +269,95 @@ def clean_json(data):
                 return result
         except:
             pass
+    
+        # Strangelove option
+        try:
+            return markdown_list_to_dict(data)
+        except:
+            pass
+
+    return None
+
+def clean_tags(data):
+    """ Extract and combine all Keywords entries from LLM output.
+        When EOS token is banned, the model may generate multiple
+        JSON objects with Keywords arrays. This function finds all
+        of them and combines them into a single Keywords list.
+
+        Returns a dict with a single Keywords key containing all found keywords.
+    """
+    all_keywords = []
+
+    if data is None:
+        return None
+
+    if isinstance(data, dict):
+        # Single dict - extract Keywords if present
+        keywords = data.get("Keywords", [])
+        if keywords:
+            all_keywords.extend(keywords)
+        return {"Keywords": all_keywords} if all_keywords else None
+
+    if isinstance(data, list):
+        # List of dicts - extract Keywords from each
+        for item in data:
+            if isinstance(item, dict):
+                keywords = item.get("Keywords", [])
+                if keywords:
+                    all_keywords.extend(keywords)
+        return {"Keywords": all_keywords} if all_keywords else None
+
+    if isinstance(data, str):
+        # Try to find all JSON objects in the string
+        # First, try to parse as single JSON
+        try:
+            parsed = json.loads(data)
+            return clean_tags(parsed)  # Recursively handle the parsed result
+        except:
+            pass
+
+        # Try to extract from JSON markdown
+        pattern = r"```json\s*(.*?)\s*```"
+        match = re.search(pattern, data, re.DOTALL)
+        if match:
+            try:
+                parsed = json.loads(match.group(1))
+                return clean_tags(parsed)
+            except:
+                pass
+
+        # Try to find multiple JSON objects in the string
+        # Look for all {"Keywords": [...]} patterns
+        keywords_pattern = r'"Keywords"\s*:\s*\[(.*?)\]'
+        matches = re.findall(keywords_pattern, data, re.DOTALL)
+
+        for match in matches:
+            # Try to parse the array content
+            try:
+                # Reconstruct the JSON array and parse it
+                array_str = '[' + match + ']'
+                keywords = json.loads(array_str)
+                if keywords:
+                    all_keywords.extend(keywords)
+            except:
+                # If parsing fails, try with repair_json
+                try:
+                    array_str = '[' + match + ']'
+                    keywords = json.loads(rj(array_str))
+                    if keywords:
+                        all_keywords.extend(keywords)
+                except:
+                    pass
+
+        if all_keywords:
+            return {"Keywords": all_keywords}
+
+        # Last resort: try repair_json on the whole string
+        try:
+            parsed = json.loads(rj(data))
+            return clean_tags(parsed)
+        except:
+            pass
 
     return None
 
@@ -278,6 +396,7 @@ class Config:
         self.caption_instruction = "Describe the image. Be specific"
         self.system_instruction = "You are a helpful assistant."
         self.keyword_instruction = ""
+        self.tag_instruction = 'Return a JSON object with key Keywords with the value as array of Keywords and tags that describe the image as follows: {"Keywords": []}' 
 
         # Sampler settings
         self.temperature = 0.2
@@ -285,6 +404,8 @@ class Config:
         self.rep_pen = 1.01
         self.top_k = 100
         self.min_p = 0.05
+        self.use_default_badwordsids = False
+        self.use_json_grammar = False
 
         self.instruction = """Return a JSON object containing a Description for the image and a list of Keywords.
 
@@ -420,6 +541,7 @@ class LLMProcessor:
         self.instruction = config.instruction
         self.system_instruction = config.system_instruction
         self.caption_instruction = config.caption_instruction
+        self.tag_instruction = config.tag_instruction
         self.requests = requests
         self.api_password = config.api_password
         self.max_tokens = config.gen_count
@@ -428,32 +550,38 @@ class LLMProcessor:
         self.rep_pen = config.rep_pen
         self.top_k = config.top_k
         self.min_p = config.min_p
+        self.use_default_badwordsids = config.use_default_badwordsids
+        self.use_json_grammar = config.use_json_grammar
 
     def describe_content(self, task="", processed_image=None):
         if not processed_image:
             print("No image to describe.")
-            
+
             return None
-        
+
+        # Determine instruction and whether to ban EOS token based on task
         if task == "caption":
             instruction = self.caption_instruction
-        
+            ban_eos = self.use_default_badwordsids
+
         elif task == "keywords":
-            instruction = self.instruction
-        
+            instruction = self.tag_instruction
+            ban_eos = self.use_default_badwordsids  # Ban EOS token for keywords-only generation
+
         elif task == "caption_and_keywords":
             instruction = self.instruction
-        
+            ban_eos = self.use_default_badwordsids
+
         else:
             print(f"invalid task: {task}")
-            
+
             return None
-            
+
         try:
             messages = [
                 {"role": "system", "content": self.system_instruction},
                 {
-                    "role": "user", 
+                    "role": "user",
                     "content": [
                         {"type": "text", "text": instruction},
                         {
@@ -465,7 +593,7 @@ class LLMProcessor:
                     ]
                 }
             ]
-            
+
             payload = {
                 "messages": messages,
                 "max_tokens": self.max_tokens,
@@ -473,9 +601,50 @@ class LLMProcessor:
                 "top_p": self.top_p,
                 "top_k": self.top_k,
                 "min_p": self.min_p,
-                "rep_pen": self.rep_pen
+                "rep_pen": self.rep_pen,
+                "use_default_badwordsids": ban_eos
             }
-            
+
+            # Add JSON schema if grammar is enabled and task requires structured output
+            if self.use_json_grammar and task in ["caption_and_keywords", "keywords"]:
+                if task == "caption_and_keywords":
+                    # Schema for both description and keywords
+                    payload["response_format"] = {
+                        "type": "json_object",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "Description": {
+                                    "type": "string"
+                                },
+                                "Keywords": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                }
+                            },
+                            "required": ["Description", "Keywords"]
+                        }
+                    }
+                elif task == "keywords":
+                    # Schema for keywords only
+                    payload["response_format"] = {
+                        "type": "json_object",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "Keywords": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                }
+                            },
+                            "required": ["Keywords"]
+                        }
+                    }
+
             endpoint = f"{self.api_url}/v1/chat/completions"
             headers = {
                 "Content-Type": "application/json"
@@ -705,91 +874,97 @@ class FileProcessor:
                     directory, files = self.metadata_queue.get(timeout=1)
                     self.callback(f"Processing directory: {directory}")
                     self.callback(f"---")
-                    
-                    # If we have a last processed file checkpoint, find where to resume
-                    if self.last_processed_file:
-                        try:
-                            resume_idx = files.index(self.last_processed_file) + 1
-                            # Only skip if we haven't processed the entire directory yet
-                            if resume_idx < len(files):
-                                self.callback(f"Resuming from file: {self.last_processed_file}")
-                                files = files[resume_idx:]
-                            self.last_processed_file = None  # Reset after finding
-                        except ValueError:
-                            # File not in this batch, process normally
-                            pass
-                    
-                    batch_size = 50 
-                    for i in range(0, len(files), batch_size):
-                        batch = files[i:i+batch_size]
-                        metadata_list = self._get_metadata_batch(batch)
-                        
-                        for metadata in metadata_list:
-                            if metadata:
-                                if not self.config.skip_verify:
-                                    # Check ExifTool validation
-                                    if "ExifTool:Validate" in metadata:
-                                        errors, warnings, minor = map(int, metadata.get("ExifTool:Validate", "0 0 0").split())
-                                        source_file = metadata.get("SourceFile")
-                                        
-                                        if errors > 0:
-                                            print(f"{source_file}: failed to validate. Skipping!")
-                                            self.callback(f"\n{source_file}: failed to validate. Skipping!")
-                                            self.callback(f"---")
-                                            self.files_processed +=1
-                                            continue
-                                                       
-                                # Process metadata
-                                keywords = []
-                                status = None
-                                identifier = None
-                                caption = None
-                                
-                                # Make a copy with only the fields we want to write
-                                new_metadata = {}
-                                
-                                # Check if we actually have a sidecar in the path
-                                if self.config.use_sidecar and metadata["SourceFile"].lower().endswith(".xmp"):
-                                    metadata["SourceFile"] = os.path.splitext(metadata["SourceFile"])[0]
-                                      
-                                new_metadata["SourceFile"] = metadata.get("SourceFile")
-                                
-                                for key, value in metadata.items():
-                                    if key in self.keyword_fields:
-                                        keywords.extend(value)
-                                    if key in self.caption_fields:
-                                        caption = value
-                                    if key in self.identifier_fields:
-                                        identifier = value
-                                    if key in self.status_fields:
-                                        status = value
-                                        
-                                # Standardize the fields                             
-                                if keywords:
-                                    new_metadata["MWG:Keywords"] = keywords
-                                if caption:
-                                    new_metadata["MWG:Description"] = caption
-                                if status:
-                                    new_metadata["XMP:Status"] = status
-                                if identifier:
-                                    new_metadata["XMP:Identifier"] = identifier
-                                    
-                                self.files_processed += 1
-                                
-                                # Save checkpoint before processing file
-                                self._save_file_checkpoint(new_metadata["SourceFile"])
-                                
-                                self.process_file(new_metadata)
-                                
-                                # Clear checkpoint after successful processing
-                                if os.path.exists(self.file_checkpoint_path):
-                                    os.remove(self.file_checkpoint_path)
 
-                            if self.check_pause_stop():
-                                return
-                    
-                    self.update_progress()
-                    
+                    try:
+                        # If we have a last processed file checkpoint, find where to resume
+                        if self.last_processed_file:
+                            try:
+                                resume_idx = files.index(self.last_processed_file) + 1
+                                # Only skip if we haven't processed the entire directory yet
+                                if resume_idx < len(files):
+                                    self.callback(f"Resuming from file: {self.last_processed_file}")
+                                    files = files[resume_idx:]
+                                self.last_processed_file = None  # Reset after finding
+                            except ValueError:
+                                # File not in this batch, process normally
+                                pass
+
+                        batch_size = 50
+                        for i in range(0, len(files), batch_size):
+                            batch = files[i:i+batch_size]
+                            metadata_list = self._get_metadata_batch(batch)
+
+                            for metadata in metadata_list:
+                                if metadata:
+                                    if not self.config.skip_verify:
+                                        # Check ExifTool validation
+                                        if "ExifTool:Validate" in metadata:
+                                            errors, warnings, minor = map(int, metadata.get("ExifTool:Validate", "0 0 0").split())
+                                            source_file = metadata.get("SourceFile")
+
+                                            if errors > 0:
+                                                print(f"{source_file}: failed to validate. Skipping!")
+                                                self.callback(f"\n{source_file}: failed to validate. Skipping!")
+                                                self.callback(f"---")
+                                                self.files_processed +=1
+                                                continue
+
+                                    # Process metadata
+                                    keywords = []
+                                    status = None
+                                    identifier = None
+                                    caption = None
+
+                                    # Make a copy with only the fields we want to write
+                                    new_metadata = {}
+
+                                    # Check if we actually have a sidecar in the path
+                                    if self.config.use_sidecar and metadata["SourceFile"].lower().endswith(".xmp"):
+                                        metadata["SourceFile"] = os.path.splitext(metadata["SourceFile"])[0]
+
+                                    new_metadata["SourceFile"] = metadata.get("SourceFile")
+
+                                    for key, value in metadata.items():
+                                        if key in self.keyword_fields:
+                                            keywords.extend(value)
+                                        if key in self.caption_fields:
+                                            caption = value
+                                        if key in self.identifier_fields:
+                                            identifier = value
+                                        if key in self.status_fields:
+                                            status = value
+
+                                    # Standardize the fields
+                                    if keywords:
+                                        new_metadata["MWG:Keywords"] = keywords
+                                    if caption:
+                                        new_metadata["MWG:Description"] = caption
+                                    if status:
+                                        new_metadata["XMP:Status"] = status
+                                    if identifier:
+                                        new_metadata["XMP:Identifier"] = identifier
+
+                                    self.files_processed += 1
+
+                                    # Save checkpoint before processing file
+                                    self._save_file_checkpoint(new_metadata["SourceFile"])
+
+                                    self.process_file(new_metadata)
+
+                                    # Clear checkpoint after successful processing
+                                    if os.path.exists(self.file_checkpoint_path):
+                                        os.remove(self.file_checkpoint_path)
+
+                                if self.check_pause_stop():
+                                    return
+
+                        self.update_progress()
+
+                    except SkipDirectoryException as e:
+                        self.callback(f"Skipped directory: {directory}")
+                        self.callback(f"---")
+                        continue
+
                 except queue.Empty:
                     continue
         finally:
@@ -1080,7 +1255,7 @@ class FileProcessor:
             
             # Determine whether to generate caption, keywords, or both
             if not self.config.no_caption and self.config.detailed_caption:
-                data = clean_json(self.llm_processor.describe_content(task="keywords", processed_image=processed_image))
+                data = clean_tags(self.llm_processor.describe_content(task="keywords", processed_image=processed_image))
                 detailed_caption = clean_string(self.llm_processor.describe_content(task="caption", processed_image=processed_image))               
                 
                 if existing_caption and self.config.update_caption:
@@ -1093,7 +1268,10 @@ class FileProcessor:
                     keywords = data.get("Keywords")
                    
             else:
-                data = clean_json(self.llm_processor.describe_content(task="caption_and_keywords", processed_image=processed_image))
+                if self.config.no_caption:
+                    data = clean_tags(self.llm_processor.describe_content(task="keywords", processed_image=processed_image))
+                else:    
+                    data = clean_json(self.llm_processor.describe_content(task="caption_and_keywords", processed_image=processed_image))
                          
                 if isinstance(data, dict):
                     keywords = data.get("Keywords")
@@ -1108,7 +1286,10 @@ class FileProcessor:
                         caption = data.get("Description")
                     
                     else:
-                        caption = existing_caption
+                        if existing_caption:
+                            caption = existing_caption
+                        else:
+                            caption = ""
                         
             if not keywords:
                 status = "retry"

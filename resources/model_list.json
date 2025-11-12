@@ -1,22 +1,32 @@
 [
     {
-        "model": "SmolVLM2 2B (6 bit)",
-        "config": "smolvlm2-3b.kcpps",
-        "language_url": "https://huggingface.co/mradermacher/SmolVLM2-2.2B-Instruct-GGUF/blob/main/SmolVLM2-2.2B-Instruct.Q6_K.gguf",
-        "mmproj_url": "https://huggingface.co/ggml-org/SmolVLM2-2.2B-Instruct-GGUF/blob/main/mmproj-SmolVLM2-2.2B-Instruct-f16.gguf",
-		"description": "Lightweight model for compute limited devices.",
-        "size_mb": 2000,
-        "adapter": "./SmolVLM2.json",
-        "flashattention": false
-    },
-    {
-        "model": "CapRL-3B (6 bit)",
+        "model": "CapRL-3B (6bit)",
         "config": "caprl-3b.kcpps",
         "language_url": "https://huggingface.co/mradermacher/CapRL-3B-GGUF/blob/main/CapRL-3B.Q6_K.gguf",
         "mmproj_url": "https://huggingface.co/mradermacher/CapRL-3B-GGUF/blob/main/CapRL-3B.mmproj-f16.gguf",
-        "description": "High performance, lightweight captioning model based on Qwen2.5-VL.",
+        "description": "High performance, lightweight captioning model based on Qwen2.5-VL. Recommended light model.",
         "size_mb": 3000,
         "adapter": "chatml",
+        "flashattention": true
+    },
+	{
+        "model": "Gemma-3 4B (6bit)",
+        "config": "gemma-3-4b-q6.kcpps",
+        "language_url": "https://huggingface.co/bartowski/google_gemma-3-4b-it-GGUF/blob/main/google_gemma-3-4b-it-Q6_K.gguf",
+        "mmproj_url": "https://huggingface.co/bartowski/google_gemma-3-4b-it-GGUF/blob/main/mmproj-google_gemma-3-4b-it-f16.gguf",
+        "description": "Gemma-3 4B is the smallest and fastest release of Gemma-3. Recommended mid-size model.",
+        "size_mb": 4800,
+        "adapter": "gemma-3",
+        "flashattention": false
+    },
+	{
+        "model": "CapRL-InternVL3.5-8B (4bit)",
+        "config": "caprl-internvl3.5-8b.kcpps",
+        "language_url": "CapRL-InternVL3.5-8B-Q4_K_M.gguf",
+        "mmproj_url": "CapRL-InternVL3.5-8B-mmproj-f16.gguf",
+        "description": "Specially trained captioning model based on Qwen3-VL. Recommended large model.",
+        "size_mb": 6000,
+        "adapter": "chatml-nothink",
         "flashattention": true
     },
 	{
@@ -29,18 +39,8 @@
         "adapter": "chatml",
         "flashattention": true
     },
-    {
-        "model": "Gemma-3 4B (6bit)",
-        "config": "gemma-3-4b-q6.kcpps",
-        "language_url": "https://huggingface.co/bartowski/google_gemma-3-4b-it-GGUF/blob/main/google_gemma-3-4b-it-Q6_K.gguf",
-        "mmproj_url": "https://huggingface.co/bartowski/google_gemma-3-4b-it-GGUF/blob/main/mmproj-google_gemma-3-4b-it-f16.gguf",
-        "description": "Gemma-3 4B is the smallest and fastest release of Gemma-3.",
-        "size_mb": 4800,
-        "adapter": "gemma-3",
-        "flashattention": false
-    },
 	{
-        "model": "InternVL3.5 8B (4 bit)",
+        "model": "InternVL3.5 8B (4bit)",
         "config": "internvl3.5-8b.kcpps",
         "language_url": "https://huggingface.co/bartowski/OpenGVLab_InternVL3_5-8B-GGUF/blob/main/OpenGVLab_InternVL3_5-8B-Q4_K_M.gguf",
         "mmproj_url": "https://huggingface.co/bartowski/OpenGVLab_InternVL3_5-8B-GGUF/blob/main/mmproj-OpenGVLab_InternVL3_5-8B-f16.gguf",
@@ -49,22 +49,12 @@
         "adapter": "chatml",
         "flashattention": true
     },
-	{
-        "model": "MiniCPM-V 2.6 (4 bit)",
-        "config": "minicpm-v-2_6-q4.kcpps",
-        "language_url": "https://huggingface.co/bartowski/MiniCPM-V-2_6-GGUF/blob/main/MiniCPM-V-2_6-Q4_K_M.gguf",
-        "mmproj_url": "https://huggingface.co/bartowski/MiniCPM-V-2_6-GGUF/blob/main/mmproj-MiniCPM-V-2_6-f16.gguf",
-        "description": "Old but good image model based on Qwen2",
-        "size_mb": 6800,
-        "adapter": "chatml",
-        "flashattention": true
-    },
     {
         "model": "Qwen2.5-VL 7B (4bit)",
         "config": "qwen2-vl-7b-q4.kcpps",
         "language_url": "https://huggingface.co/bartowski/Qwen_Qwen2.5-VL-7B-Instruct-GGUF/blob/main/Qwen_Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf",
         "mmproj_url": "https://huggingface.co/bartowski/Qwen_Qwen2.5-VL-7B-Instruct-GGUF/blob/main/mmproj-Qwen_Qwen2.5-VL-7B-Instruct-f16.gguf",
-        "description": "Mid size release of Qwen2.5-VL meant to fit in 8GB of VRAM",
+        "description": "Mid size release of Qwen2.5-VL.",
         "size_mb": 7200,
         "adapter": "chatml",
         "flashattention": true
@@ -74,7 +64,7 @@
         "config": "pixtral-captioner-12b-q4.kcpps",
         "language_url": "https://huggingface.co/Hyphonical/Pixtral-12B-Captioner-Relaxed-Q4_K_M-GGUF/blob/main/pixtral-12b-captioner-relaxed-q4_k_m.gguf",
         "mmproj_url": "https://huggingface.co/mradermacher/pixtral-12b-GGUF/blob/main/pixtral-12b.mmproj-f16.gguf",
-        "description": "Mistralai's Pixtral fine-tuned for captioning (uncensored)",
+        "description": "Mistralai's Pixtral fine-tuned for captioning (uncensored).",
         "size_mb": 9700,
         "adapter": "mistral",
         "flashattention": false
@@ -84,9 +74,29 @@
         "config": "gemma-3-12b-q4.kcpps",
         "language_url": "https://huggingface.co/bartowski/google_gemma-3-12b-it-GGUF/blob/main/google_gemma-3-12b-it-Q4_K_S.gguf",
         "mmproj_url": "https://huggingface.co/bartowski/google_gemma-3-12b-it-GGUF/blob/main/mmproj-google_gemma-3-12b-it-f16.gguf",
-        "description": "Medium size release of Gemma-3",
+        "description": "Medium size release of Gemma-3.",
         "size_mb": 9800,
         "adapter": "gemma-3",
+        "flashattention": false
+    },
+	{
+        "model": "MiniCPM-V 2.6 (4 bit)",
+        "config": "minicpm-v-2_6-q4.kcpps",
+        "language_url": "https://huggingface.co/bartowski/MiniCPM-V-2_6-GGUF/blob/main/MiniCPM-V-2_6-Q4_K_M.gguf",
+        "mmproj_url": "https://huggingface.co/bartowski/MiniCPM-V-2_6-GGUF/blob/main/mmproj-MiniCPM-V-2_6-f16.gguf",
+        "description": "Old but good image model based on Qwen2.",
+        "size_mb": 6800,
+        "adapter": "chatml",
+        "flashattention": true
+    },
+	{
+        "model": "SmolVLM2 2B (6 bit)",
+        "config": "smolvlm2-3b.kcpps",
+        "language_url": "https://huggingface.co/mradermacher/SmolVLM2-2.2B-Instruct-GGUF/blob/main/SmolVLM2-2.2B-Instruct.Q6_K.gguf",
+        "mmproj_url": "https://huggingface.co/ggml-org/SmolVLM2-2.2B-Instruct-GGUF/blob/main/mmproj-SmolVLM2-2.2B-Instruct-f16.gguf",
+		"description": "Lightweight model for compute limited devices. Tends to have to retry a lot.",
+        "size_mb": 2000,
+        "adapter": "./SmolVLM2.json",
         "flashattention": false
     }
 ]

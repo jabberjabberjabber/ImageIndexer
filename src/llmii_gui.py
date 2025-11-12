@@ -20,6 +20,7 @@ from PyQt6.QtGui import QPixmap, QImage, QPalette, QColor, QFont, QIcon
 
 from . import llmii
 from . import help_text
+from .llmii import SkipDirectoryException
 
 class GuiConfig:
     """ Configuration class for GUI dimensions and properties
@@ -185,6 +186,12 @@ class SettingsDialog(QDialog):
         caption_instruction_layout.addWidget(self.caption_instruction_input)
         caption_layout.addLayout(caption_instruction_layout)
 
+        tag_instruction_layout = QHBoxLayout()
+        self.tag_instruction_input = QLineEdit('Return a JSON object with key Keywords with the value as array of Keywords and tags that describe the image as follows: {"Keywords": []}')
+        tag_instruction_layout.addWidget(QLabel("Tag Instruction:"))
+        tag_instruction_layout.addWidget(self.tag_instruction_input)
+        caption_layout.addLayout(tag_instruction_layout)
+
         self.caption_radio_group = QButtonGroup(self)
         self.detailed_caption_radio = QRadioButton("Separate caption query")
         self.short_caption_radio = QRadioButton("Combined caption query")
@@ -291,6 +298,17 @@ class SettingsDialog(QDialog):
 
         sampler_group.setLayout(sampler_layout)
         scroll_layout.addWidget(sampler_group)
+
+        # JSON Grammar Group
+        json_grammar_group = QGroupBox("Structured Output")
+        json_grammar_layout = QVBoxLayout()
+
+        self.use_json_grammar_checkbox = QCheckBox("Use JSON grammar to force structured output")
+        self.use_json_grammar_checkbox.setChecked(False)
+        json_grammar_layout.addWidget(self.use_json_grammar_checkbox)
+
+        json_grammar_group.setLayout(json_grammar_layout)
+        scroll_layout.addWidget(json_grammar_group)
 
         options_group = QGroupBox("File Options")
         options_layout = QVBoxLayout()
@@ -422,6 +440,7 @@ class SettingsDialog(QDialog):
                 self.quick_fail_checkbox.setChecked(settings.get('quick_fail', False))
                 self.use_sidecar_checkbox.setChecked(settings.get('use_sidecar', False))
                 self.caption_instruction_input.setText(settings.get('caption_instruction', 'Describe the image in detail. Be specific.'))
+                self.tag_instruction_input.setText(settings.get('tag_instruction', 'Return a JSON object with key Keywords with the value as array of Keywords and tags that describe the image as follows: {"Keywords": []}'))
                 
                 # Set radio button based on settings
                 if settings.get('detailed_caption', False):
@@ -452,6 +471,9 @@ class SettingsDialog(QDialog):
                 self.min_p_spinbox.setValue(settings.get('min_p', 0.05))
                 self.rep_pen_spinbox.setValue(settings.get('rep_pen', 1.01))
 
+                # Load JSON grammar setting
+                self.use_json_grammar_checkbox.setChecked(settings.get('use_json_grammar', False))
+
         except Exception as e:
             print(f"Error loading settings: {e}")
             
@@ -473,6 +495,7 @@ class SettingsDialog(QDialog):
             'quick_fail': self.quick_fail_checkbox.isChecked(),
             'update_keywords': self.update_keywords_checkbox.isChecked(),
             'caption_instruction': self.caption_instruction_input.text(),
+            'tag_instruction': self.tag_instruction_input.text(),
             'detailed_caption': self.detailed_caption_radio.isChecked(),
             'short_caption': self.short_caption_radio.isChecked(),
             'no_caption': self.no_caption_radio.isChecked(),
@@ -491,8 +514,9 @@ class SettingsDialog(QDialog):
             'top_k': self.top_k_spinbox.value(),
             'min_p': self.min_p_spinbox.value(),
             'rep_pen': self.rep_pen_spinbox.value(),
+            'use_json_grammar': self.use_json_grammar_checkbox.isChecked(),
         }
-        
+
         try:
             with open('settings.json', 'w') as f:
                 json.dump(settings, f, indent=4)
@@ -526,7 +550,7 @@ class APICheckThread(QThread):
             
     def stop(self):
         self.running = False
-        
+
 class IndexerThread(QThread):
     output_received = pyqtSignal(str)
     image_processed = pyqtSignal(str, str, list, str)  # base64_image, caption, keywords, filename
@@ -536,6 +560,7 @@ class IndexerThread(QThread):
         self.config = config
         self.paused = False
         self.stopped = False
+        self.skip_current = False
 
     def process_callback(self, message):
         """Callback for llmii's process_file function"""
@@ -561,6 +586,9 @@ class IndexerThread(QThread):
     def check_paused_or_stopped(self):
         if self.stopped:
             raise Exception("Indexer stopped by user")
+        if self.skip_current:
+            self.skip_current = False  # Reset the flag
+            raise SkipDirectoryException("Skipping current directory")
         if self.paused:
             while self.paused and not self.stopped:
                 self.msleep(100)
@@ -706,11 +734,15 @@ class ImageIndexerGUI(QMainWindow):
         self.pause_button = QPushButton("Pause")
         self.pause_button.clicked.connect(self.toggle_pause)
         self.pause_button.setEnabled(False)
+        self.skip_button = QPushButton("Skip Directory")
+        self.skip_button.clicked.connect(self.skip_directory)
+        self.skip_button.setEnabled(False)
         self.stop_button = QPushButton("Stop")
         self.stop_button.clicked.connect(self.stop_indexer)
         self.stop_button.setEnabled(False)
         button_layout.addWidget(self.run_button)
         button_layout.addWidget(self.pause_button)
+        button_layout.addWidget(self.skip_button)
         button_layout.addWidget(self.stop_button)
         controls_layout.addLayout(button_layout)
         
@@ -1094,7 +1126,8 @@ class ImageIndexerGUI(QMainWindow):
         config.short_caption = self.settings_dialog.short_caption_radio.isChecked()
         config.no_caption = self.settings_dialog.no_caption_radio.isChecked()
         config.caption_instruction = self.settings_dialog.caption_instruction_input.text()
-        
+        config.tag_instruction = self.settings_dialog.tag_instruction_input.text()
+
         # Load instruction from settings
         config.instruction = self.settings_dialog.instruction_text
         
@@ -1110,6 +1143,9 @@ class ImageIndexerGUI(QMainWindow):
         config.min_p = self.settings_dialog.min_p_spinbox.value()
         config.rep_pen = self.settings_dialog.rep_pen_spinbox.value()
 
+        # Load JSON grammar setting
+        config.use_json_grammar = self.settings_dialog.use_json_grammar_checkbox.isChecked()
+
         self.indexer_thread = IndexerThread(config)
         self.indexer_thread.output_received.connect(self.update_output)
         self.indexer_thread.image_processed.connect(self.update_image_preview)
@@ -1122,6 +1158,7 @@ class ImageIndexerGUI(QMainWindow):
         self.output_area.append("Running Image Indexer...")
         self.run_button.setEnabled(False)
         self.pause_button.setEnabled(True)
+        self.skip_button.setEnabled(True)
         self.stop_button.setEnabled(True)
 
     def set_paused(self, paused):
@@ -1142,17 +1179,24 @@ class ImageIndexerGUI(QMainWindow):
             self.pause_button.setText("Pause")
             self.update_output("Indexer resumed.")
 
+    def skip_directory(self):
+        if self.indexer_thread:
+            self.indexer_thread.skip_current = True
+            self.update_output("Skipping current directory...")
+
     def stop_indexer(self):
         self.pause_handler.stop_signal.emit()
         self.update_output("Stopping indexer...")
         self.run_button.setEnabled(True)
         self.pause_button.setEnabled(False)
+        self.skip_button.setEnabled(False)
         self.stop_button.setEnabled(False)
 
     def indexer_finished(self):
         self.update_output("\nImage Indexer finished.")
         self.run_button.setEnabled(True)
         self.pause_button.setEnabled(False)
+        self.skip_button.setEnabled(False)
         self.stop_button.setEnabled(False)
         self.pause_button.setText("Pause")
 
