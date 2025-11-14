@@ -150,21 +150,20 @@ def clean_string(data):
     """ Makes sure the string is clean for addition
         to the metadata.
     """
+        
     if isinstance(data, dict):
         data = json.dumps(data)
     
-    # More than one think tag
-    #if len(data.split("<think>")) > 2:
-    #    return none
-        
-    # One think tag, remove everything before it.
-    if "<think>" in data:
-        data = data[data.index("<think>")+7:]
-    
-    # Remove everything after an end think tag
-    data = data.split("</think>")[0]
-    
+    # Remove <think> content
     if isinstance(data, str):
+        # Remove matched pairs first
+        data = re.sub(r'<think>.*?</think>', '', data, flags=re.DOTALL)
+        # Remove any remaining orphaned opening tags
+        data = re.sub(r'<think>', '', data)
+        # Remove any remaining orphaned closing tags
+        data = re.sub(r'</think>', '', data)
+        
+        # Normalize
         data = re.sub(r"\n", "", data)
         data = re.sub(r'["""]', '"', data)
         data = re.sub(r"\\{2}", "", data)
@@ -172,7 +171,9 @@ def clean_string(data):
         
         if last_period != -1:
             data = data[:last_period+1]
-    
+    else:
+        return ""
+        
     return data
     
 
@@ -809,7 +810,7 @@ class FileProcessor:
             self.callback = print
         else:
             self.callback = callback
-        
+        self.failed_validations = []
         self.files_in_queue = 0
         self.total_processing_time = 0
         self.files_processed = 0
@@ -933,10 +934,12 @@ class FileProcessor:
                                         else:
                                             errors, warnings, minor = 0, 0, 0
                                         source_file = metadata.get("SourceFile")
-
-                                        if errors > 0:
-                                            print(f"{source_file}: failed to validate. Skipping!")
-                                            self.callback(f"\n{source_file}: failed to validate. Skipping!")
+                                        # ExifTool will give 3 results for validation: minor, warning, error
+                                        # If there are warnings but they are all minor, we don't care
+                                        if (errors > 0) or (warnings > minor):
+                                            print(f"Skipped due to file validation failure: {source_file}")
+                                            self.callback(f"\nSkipped due to metadata validation failure: {source_file}")
+                                            self.failed_validations.append(source_file)
                                             self.callback(f"---")
                                             self.files_processed +=1
                                             continue
@@ -1253,7 +1256,7 @@ class FileProcessor:
                 return
             
         except Exception as e:
-            print(f"<b>Error processing:</b> {file_path}: {str(e)}")
+            print(f"Error processing: {file_path}: {str(e)}")
             self.callback(f"<b>Error processing:</b> {file_path}: {str(e)}")
             self.callback(f"---")
             return
@@ -1362,7 +1365,7 @@ class FileProcessor:
             
         except Exception as e:
             self.callback(f"\nError writing metadata to {file_path}: {str(e)}")
-            print(f"\nError writing metadata to {file_path}: {str(e)}")
+            print(f"\nError writing to {file_path}: {str(e)}")
             self.callback(f"---")
             return False 
     
@@ -1416,7 +1419,7 @@ def main(config=None, callback=None, check_paused_or_stopped=None):
             callback("Processing interrupted. State saved for resuming later.")
     
     except Exception as e:
-        print(f"An error occurred during processing: {str(e)}")
+        print(f"Error occurred during processing: {str(e)}")
     
         if callback:
             callback(f"Error: {str(e)}")
@@ -1425,6 +1428,7 @@ def main(config=None, callback=None, check_paused_or_stopped=None):
         print("Waiting for indexer to complete...")
         file_processor.indexer.join()
         print("Indexing completed.")
+        
    
 if __name__ == "__main__":
     main()

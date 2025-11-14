@@ -134,7 +134,97 @@ It is sometimes possible to get keywords or captions in a language besides Engli
 
 ## Settings
 
-   **Press the HELP button in the settings dialog.**
+### API Settings
+
+**API URL:** URL of the LLM API server. Default is `http://localhost:5001`
+
+**API Password:** Password for API authentication if required. Leave blank if no authentication needed.
+
+### Instruction Settings
+
+**System Instruction:** The instruction given to guide the LLM's behavior. 
+
+**Edit Instruction:** Opens dialog to edit detailed instructions for image analysis.
+
+### Directory Setting
+
+**Skip Folders:** list folders here that you want to skip entirely. Separate by a new line or a semicolon. You don't have to put the full path -- the subdirectory name only will suffice.
+
+### Caption Options
+
+**Caption Instruction:** Specific instructions for generating a detailed image caption.
+
+**Separate caption query:** Send a separate query for captions and keywords This will take twice as long. Uses the Caption instruction and Keyword instruction.
+
+**Combined caption query:** Generate captions and keywords in one query. This uses the main instruction. *Recommended setting*
+
+**No caption query:** Skip caption generation entirely, only create keywords. This uses the Keyword instruction.
+
+### Generation Options
+
+**GenTokens:** Maximum number of tokens to generate in response. These are tokens, not words. Fewer tokens means faster processing per generation but may lead to more retries because the model may get cut off mid generation. More is not necessarily better though. *Recommended setting for separate captions or keywords is between 100 and 200, for combined caption and keywords between 200 and 300*
+
+### Image Options
+
+**Dimension length:** The maximum length of a horizontal or vertical dimension of the image, in pixels. Setting this higher will not necessarily result in better generations. *Recommended setting is between 392 and 896*
+
+### Sampler Options
+
+Samplers affect the tokens that the AI can choose from every time it generates a new token.
+
+**Temperature:** The randomness of the model output. Between 0.0 and 2.0 *Recommended setting is between 0.1 and 0.5*
+
+**top_p:** Chooses from the smallest set of tokens which have a probability exceeding p. Off = 1.0 *Recommended setting is between 0.92 and 1*
+
+**top_k:** Limits to the most likely k tokens. Off = 0 *Recommended setting is between 20 and 100* 
+
+**min_p:** Blocks tokens with probability lower than p. Off = 0.0 *Recommended setting is between 0.02 and 0.05*
+
+**rep_pen:** Prevents repetition. May cause erratic behavior. Off = 1.0 *Recommended setting is between 1.0 and 1.02*
+
+### File Options
+
+**Don't go in subdirectories:** Only process images in the main directory, don't look inside others.
+
+**Reprocess everything:** Process all images, even if they already have metadata. If you check this and leave *Don't clear existing keywords* unchecked it will remove all existing keywords from any previously processed files and replace them with the new generations.
+
+**Reprocess failures:** Reprocess images that were marked as failed in previous runs.
+
+**Fix any orphans:** *Decrecated setting* When a file gets processed it gets some metadata added to it so that the tool knows it has been processed and what the state of the last processing was. If we find images with what looks like valid metadata that was processed by the tool, but the status markers are missing, we call these orphans. This option will add the status marker to the orphans without regenerating the metadata. Without this checked then files which were produced with versions of the tool before the removal of the need for the json database will be processed again as new files. With this checked then if there is bad metadata in images that looks valid to the tool, it will mark those files as a success. It is recommended to use this option only if you have used previous versions of this tool before March 2025 and are running on those files again.
+
+**No backups:** Don't create backups of existing metadata before modifying. By default there will be a file created with an `_original` label for each altered image, so if you don't want that then check this box.
+
+**Pretend mode:** Simulate processing without making any changes.
+
+**No file validation:** If checked, files will not be checked for metadata errors.
+
+**No retries:** If a generation fails a second attempt will occur unless this box is checked.
+
+**Use metadata sidecar instead of writing to image:** If you do not want to write anything to the image files themselves, for instance if you have hashed the files and they cannot change, you can instead write the metadata to an xmp file with the same name as the image file but with an xmp extension added. This xmp file will contain the metadata.
+
+### Existing Metadata
+
+**Don't clear existing keywords:** Checking this box will add the newly generated keywords to any existing keywords in the metadata. This option is useful for running the generations again with a new model or a new prompt along with *Reprocess all* to add try and fill them out. Will not add duplicates.  
+
+**Don't clear existing caption:** Keep existing caption and add new text with tags. Checking this will add the generated caption onto an existing caption surrounded by XML tags.
+
+### Keyword Corrections
+
+These options determine how the keywords are handled after the AI generates them.
+
+**Depluralize keywords:** Convert plural keywords to singular form. May strip the last *s* off the end of some words.
+
+**Limit to N words:** Limit keywords to specified number of words each.
+
+**Split 'and'/'or' entries:** Break *and* / *or* phrases into separate keywords unless they are in a list of exceptions like 'rock and roll'.
+
+**Ban prompt word repetitions:** AIs really like to repeat words back from the prompt if they aren't feeling very creative. Checking this option will refuse to add words that are in the instructions which commonly get repeated.
+
+**Cannot start with 3+ digits:** Filter out keywords starting with 3+ digits. *3d video* would be fine but *2024 summer* would be rejected.
+
+**Words must be 2+ characters:** Require words to be at least 2 characters long unless they are *x* or *u*.
+
+**Only Latin characters:** Remove keywords with non-Latin characters.
    
 ## More Information and Troubleshooting
 
