@@ -3,10 +3,6 @@ from json_repair import repair_json as rj
 from datetime import timedelta
 from .image_processor import ImageProcessor
 from .llmii_utils import first_json, de_pluralize, AND_EXCEPTIONS
-
-class SkipDirectoryException(Exception):
-    """Exception raised to skip the current directory"""
-    pass
     
 def split_on_internal_capital(word):
     """ Split a word if it contains a capital letter after the 4th position.
@@ -135,7 +131,7 @@ def normalize_keyword(keyword, banned_words, config=None):
                 return None
         
     # Check if starts with 3+ digits if enabled
-    if config.no_digits_start and re.match(r'^\d{3,}', words[0]):
+    if config.no_digits_start and words and re.match(r'^\d{3,}', words[0]):
         return None
     
     # Make words singular if depluralize_keywords is enabled
@@ -406,6 +402,7 @@ class Config:
         self.min_p = 0.05
         self.use_default_badwordsids = False
         self.use_json_grammar = False
+        self.skip_folders = []
 
         self.instruction = """Return a JSON object containing a Description for the image and a list of Keywords.
 
@@ -673,12 +670,13 @@ class LLMProcessor:
             return None
 
 class BackgroundIndexer(threading.Thread):
-    def __init__(self, root_dir, metadata_queue, file_extensions, no_crawl=False, chunk_size=100):
+    def __init__(self, root_dir, metadata_queue, file_extensions, no_crawl=False, chunk_size=100, skip_folders=None):
         threading.Thread.__init__(self)
         self.root_dir = root_dir
         self.metadata_queue = metadata_queue
         self.file_extensions = file_extensions
         self.no_crawl = no_crawl
+        self.skip_folders = skip_folders if skip_folders else []
         self.total_files_found = 0
         self.indexing_complete = False
         self.chunk_size = chunk_size
@@ -702,18 +700,47 @@ class BackgroundIndexer(threading.Thread):
                 f.write(directory)
         except:
             pass
+
+    def _should_skip_directory(self, directory):
+        """Check if directory should be skipped based on skip_folders list"""
+        if not self.skip_folders:
+            return False
+
+        # Normalize the directory path
+        dir_normalized = os.path.normpath(directory)
+
+        for skip_folder in self.skip_folders:
+            skip_normalized = os.path.normpath(skip_folder)
+
+            # Check if it's a full path match
+            if dir_normalized == skip_normalized:
+                return True
+
+            # Check if it's a relative path from root_dir
+            relative_skip = os.path.normpath(os.path.join(self.root_dir, skip_folder))
+            if dir_normalized == relative_skip:
+                return True
+
+            # Check if the directory contains the skip folder in its path
+            if skip_normalized in dir_normalized or os.path.basename(dir_normalized) == os.path.basename(skip_normalized):
+                return True
+
+        return False
             
     def run(self):
         if self.no_crawl:
-            self._index_directory(self.root_dir)
+            if not self._should_skip_directory(self.root_dir):
+                self._index_directory(self.root_dir)
         else:
             # Get ordered list of directories to process
             directories = []
             for root, _, _ in os.walk(self.root_dir):
-                directories.append(os.path.normpath(root))
-            
+                dir_path = os.path.normpath(root)
+                if not self._should_skip_directory(dir_path):
+                    directories.append(dir_path)
+
             directories.sort()
-            
+
             # Skip to last processed directory if resuming
             start_idx = 0
             if self.last_processed_dir:
@@ -832,13 +859,15 @@ class FileProcessor:
         self.metadata_queue = queue.Queue()
 
         chunk_size = getattr(config, 'chunk_size', 100)
-        
+        skip_folders = getattr(config, 'skip_folders', [])
+
         self.indexer = BackgroundIndexer(
-            config.directory, 
-            self.metadata_queue, 
-            [ext for exts in self.image_extensions.values() for ext in exts], 
+            config.directory,
+            self.metadata_queue,
+            [ext for exts in self.image_extensions.values() for ext in exts],
             config.no_crawl,
-            chunk_size=chunk_size
+            chunk_size=chunk_size,
+            skip_folders=skip_folders
         )
         
         self.file_checkpoint_path = os.path.join(config.directory, ".llmii_file_checkpoint")
@@ -875,95 +904,93 @@ class FileProcessor:
                     self.callback(f"Processing directory: {directory}")
                     self.callback(f"---")
 
-                    try:
-                        # If we have a last processed file checkpoint, find where to resume
-                        if self.last_processed_file:
-                            try:
-                                resume_idx = files.index(self.last_processed_file) + 1
-                                # Only skip if we haven't processed the entire directory yet
-                                if resume_idx < len(files):
-                                    self.callback(f"Resuming from file: {self.last_processed_file}")
-                                    files = files[resume_idx:]
-                                self.last_processed_file = None  # Reset after finding
-                            except ValueError:
-                                # File not in this batch, process normally
-                                pass
+                    # If we have a last processed file checkpoint, find where to resume
+                    if self.last_processed_file:
+                        try:
+                            resume_idx = files.index(self.last_processed_file) + 1
+                            # Only skip if we haven't processed the entire directory yet
+                            if resume_idx < len(files):
+                                self.callback(f"Resuming from file: {self.last_processed_file}")
+                                files = files[resume_idx:]
+                            self.last_processed_file = None  # Reset after finding
+                        except ValueError:
+                            # File not in this batch, process normally
+                            pass
 
-                        batch_size = 50
-                        for i in range(0, len(files), batch_size):
-                            batch = files[i:i+batch_size]
-                            metadata_list = self._get_metadata_batch(batch)
+                    batch_size = 50
+                    for i in range(0, len(files), batch_size):
+                        batch = files[i:i+batch_size]
+                        metadata_list = self._get_metadata_batch(batch)
 
-                            for metadata in metadata_list:
-                                if metadata:
-                                    if not self.config.skip_verify:
-                                        # Check ExifTool validation
-                                        if "ExifTool:Validate" in metadata:
-                                            errors, warnings, minor = map(int, metadata.get("ExifTool:Validate", "0 0 0").split())
-                                            source_file = metadata.get("SourceFile")
+                        for metadata in metadata_list:
+                            if metadata:
+                                if not self.config.skip_verify:
+                                    # Check ExifTool validation
+                                    if "ExifTool:Validate" in metadata:
+                                        validation_parts = metadata.get("ExifTool:Validate", "0 0 0").split()
+                                        if len(validation_parts) >= 3:
+                                            errors, warnings, minor = map(int, validation_parts[:3])
+                                        else:
+                                            errors, warnings, minor = 0, 0, 0
+                                        source_file = metadata.get("SourceFile")
 
-                                            if errors > 0:
-                                                print(f"{source_file}: failed to validate. Skipping!")
-                                                self.callback(f"\n{source_file}: failed to validate. Skipping!")
-                                                self.callback(f"---")
-                                                self.files_processed +=1
-                                                continue
+                                        if errors > 0:
+                                            print(f"{source_file}: failed to validate. Skipping!")
+                                            self.callback(f"\n{source_file}: failed to validate. Skipping!")
+                                            self.callback(f"---")
+                                            self.files_processed +=1
+                                            continue
 
-                                    # Process metadata
-                                    keywords = []
-                                    status = None
-                                    identifier = None
-                                    caption = None
+                                # Process metadata
+                                keywords = []
+                                status = None
+                                identifier = None
+                                caption = None
 
-                                    # Make a copy with only the fields we want to write
-                                    new_metadata = {}
+                                # Make a copy with only the fields we want to write
+                                new_metadata = {}
 
-                                    # Check if we actually have a sidecar in the path
-                                    if self.config.use_sidecar and metadata["SourceFile"].lower().endswith(".xmp"):
-                                        metadata["SourceFile"] = os.path.splitext(metadata["SourceFile"])[0]
+                                # Check if we actually have a sidecar in the path
+                                if self.config.use_sidecar and metadata["SourceFile"].lower().endswith(".xmp"):
+                                    metadata["SourceFile"] = os.path.splitext(metadata["SourceFile"])[0]
 
-                                    new_metadata["SourceFile"] = metadata.get("SourceFile")
+                                new_metadata["SourceFile"] = metadata.get("SourceFile")
 
-                                    for key, value in metadata.items():
-                                        if key in self.keyword_fields:
-                                            keywords.extend(value)
-                                        if key in self.caption_fields:
-                                            caption = value
-                                        if key in self.identifier_fields:
-                                            identifier = value
-                                        if key in self.status_fields:
-                                            status = value
+                                for key, value in metadata.items():
+                                    if key in self.keyword_fields:
+                                        keywords.extend(value)
+                                    if key in self.caption_fields:
+                                        caption = value
+                                    if key in self.identifier_fields:
+                                        identifier = value
+                                    if key in self.status_fields:
+                                        status = value
 
-                                    # Standardize the fields
-                                    if keywords:
-                                        new_metadata["MWG:Keywords"] = keywords
-                                    if caption:
-                                        new_metadata["MWG:Description"] = caption
-                                    if status:
-                                        new_metadata["XMP:Status"] = status
-                                    if identifier:
-                                        new_metadata["XMP:Identifier"] = identifier
+                                # Standardize the fields
+                                if keywords:
+                                    new_metadata["MWG:Keywords"] = keywords
+                                if caption:
+                                    new_metadata["MWG:Description"] = caption
+                                if status:
+                                    new_metadata["XMP:Status"] = status
+                                if identifier:
+                                    new_metadata["XMP:Identifier"] = identifier
 
-                                    self.files_processed += 1
+                                self.files_processed += 1
 
-                                    # Save checkpoint before processing file
-                                    self._save_file_checkpoint(new_metadata["SourceFile"])
+                                # Save checkpoint before processing file
+                                self._save_file_checkpoint(new_metadata["SourceFile"])
 
-                                    self.process_file(new_metadata)
+                                self.process_file(new_metadata)
 
-                                    # Clear checkpoint after successful processing
-                                    if os.path.exists(self.file_checkpoint_path):
-                                        os.remove(self.file_checkpoint_path)
+                                # Clear checkpoint after successful processing
+                                if os.path.exists(self.file_checkpoint_path):
+                                    os.remove(self.file_checkpoint_path)
 
-                                if self.check_pause_stop():
-                                    return
+                            if self.check_pause_stop():
+                                return
 
-                        self.update_progress()
-
-                    except SkipDirectoryException as e:
-                        self.callback(f"Skipped directory: {directory}")
-                        self.callback(f"---")
-                        continue
+                    self.update_progress()
 
                 except queue.Empty:
                     continue
@@ -1347,9 +1374,9 @@ class FileProcessor:
               
         if self.config.update_keywords:
             existing_keywords = metadata.get("MWG:Keywords", [])
-            
+
             if isinstance(existing_keywords, str):
-                existing_keywords = existing_keywords.split(",").strip()
+                existing_keywords = [k.strip() for k in existing_keywords.split(",")]
                 
             for keyword in existing_keywords:
                 normalized = normalize_keyword(keyword, self.banned_words, self.config)

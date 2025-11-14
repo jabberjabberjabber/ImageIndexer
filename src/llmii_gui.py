@@ -20,7 +20,6 @@ from PyQt6.QtGui import QPixmap, QImage, QPalette, QColor, QFont, QIcon
 
 from . import llmii
 from . import help_text
-from .llmii import SkipDirectoryException
 
 class GuiConfig:
     """ Configuration class for GUI dimensions and properties
@@ -92,14 +91,14 @@ class InstructionDialog(QDialog):
         self.setWindowTitle("Edit Instruction")
         self.setModal(True)
         self.resize(700, 500)
-        
+
         layout = QVBoxLayout(self)
-        
+
         self.instruction_input = QPlainTextEdit()
         self.instruction_input.setPlainText(instruction_text)
         layout.addWidget(QLabel("Edit Instruction:"))
         layout.addWidget(self.instruction_input)
-        
+
         button_layout = QHBoxLayout()
         save_button = QPushButton("Save")
         save_button.clicked.connect(self.accept)
@@ -108,9 +107,39 @@ class InstructionDialog(QDialog):
         button_layout.addWidget(save_button)
         button_layout.addWidget(cancel_button)
         layout.addLayout(button_layout)
-    
+
     def get_instruction(self):
         return self.instruction_input.toPlainText()
+
+class SkipFoldersDialog(QDialog):
+    def __init__(self, skip_folders_text, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Edit Skip Folders")
+        self.setModal(True)
+        self.resize(700, 400)
+
+        layout = QVBoxLayout(self)
+
+        help_label = QLabel("Enter folder names or paths to skip (one per line or separated by semicolons).\nYou can use full paths or paths relative to the working directory.")
+        help_label.setWordWrap(True)
+        layout.addWidget(help_label)
+
+        self.skip_folders_input = QPlainTextEdit()
+        self.skip_folders_input.setPlainText(skip_folders_text)
+        layout.addWidget(QLabel("Skip Folders:"))
+        layout.addWidget(self.skip_folders_input)
+
+        button_layout = QHBoxLayout()
+        save_button = QPushButton("Save")
+        save_button.clicked.connect(self.accept)
+        cancel_button = QPushButton("Cancel")
+        cancel_button.clicked.connect(self.reject)
+        button_layout.addWidget(save_button)
+        button_layout.addWidget(cancel_button)
+        layout.addLayout(button_layout)
+
+    def get_skip_folders(self):
+        return self.skip_folders_input.toPlainText()
 
 class SettingsHelpDialog(QDialog):
     """ Dialog that shows help information for all settings """
@@ -176,6 +205,12 @@ class SettingsDialog(QDialog):
         self.edit_instruction_button.clicked.connect(self.edit_instruction)
         instruction_button_layout.addWidget(self.edit_instruction_button)
         scroll_layout.addLayout(instruction_button_layout)
+
+        skip_folders_button_layout = QHBoxLayout()
+        self.edit_skip_folders_button = QPushButton("Edit Skip Folders")
+        self.edit_skip_folders_button.clicked.connect(self.edit_skip_folders)
+        skip_folders_button_layout.addWidget(self.edit_skip_folders_button)
+        scroll_layout.addLayout(skip_folders_button_layout)
 
         caption_group = QGroupBox("Caption Options")
         caption_layout = QVBoxLayout()
@@ -404,7 +439,8 @@ class SettingsDialog(QDialog):
         layout.addLayout(button_layout)
 
         self.instruction_text = GuiConfig.DEFAULT_INSTRUCTION
-        
+        self.skip_folders_text = ""
+
         self.load_settings()
     
     def show_help(self):
@@ -416,6 +452,11 @@ class SettingsDialog(QDialog):
         dialog = InstructionDialog(self.instruction_text, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.instruction_text = dialog.get_instruction()
+
+    def edit_skip_folders(self):
+        dialog = SkipFoldersDialog(self.skip_folders_text, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.skip_folders_text = dialog.get_skip_folders()
         
     def load_settings(self):
         try:
@@ -429,6 +470,7 @@ class SettingsDialog(QDialog):
                 self.gen_count.setValue(settings.get('gen_count', 250))
                 self.res_limit.setValue(settings.get('res_limit', 448))
                 self.instruction_text = settings.get('instruction', GuiConfig.DEFAULT_INSTRUCTION)
+                self.skip_folders_text = settings.get('skip_folders', '')
                 
                 self.no_crawl_checkbox.setChecked(settings.get('no_crawl', False))
                 self.reprocess_failed_checkbox.setChecked(settings.get('reprocess_failed', False))
@@ -483,6 +525,7 @@ class SettingsDialog(QDialog):
             'api_password': self.api_password_input.text(),
             'system_instruction': self.system_instruction_input.text(),
             'instruction': self.instruction_text,
+            'skip_folders': self.skip_folders_text,
             'gen_count': self.gen_count.value(),
             'res_limit': self.res_limit.value(),
             'no_crawl': self.no_crawl_checkbox.isChecked(),
@@ -560,7 +603,6 @@ class IndexerThread(QThread):
         self.config = config
         self.paused = False
         self.stopped = False
-        self.skip_current = False
 
     def process_callback(self, message):
         """Callback for llmii's process_file function"""
@@ -586,9 +628,6 @@ class IndexerThread(QThread):
     def check_paused_or_stopped(self):
         if self.stopped:
             raise Exception("Indexer stopped by user")
-        if self.skip_current:
-            self.skip_current = False  # Reset the flag
-            raise SkipDirectoryException("Skipping current directory")
         if self.paused:
             while self.paused and not self.stopped:
                 self.msleep(100)
@@ -734,15 +773,11 @@ class ImageIndexerGUI(QMainWindow):
         self.pause_button = QPushButton("Pause")
         self.pause_button.clicked.connect(self.toggle_pause)
         self.pause_button.setEnabled(False)
-        self.skip_button = QPushButton("Skip Directory")
-        self.skip_button.clicked.connect(self.skip_directory)
-        self.skip_button.setEnabled(False)
         self.stop_button = QPushButton("Stop")
         self.stop_button.clicked.connect(self.stop_indexer)
         self.stop_button.setEnabled(False)
         button_layout.addWidget(self.run_button)
         button_layout.addWidget(self.pause_button)
-        button_layout.addWidget(self.skip_button)
         button_layout.addWidget(self.stop_button)
         controls_layout.addLayout(button_layout)
         
@@ -1146,6 +1181,18 @@ class ImageIndexerGUI(QMainWindow):
         # Load JSON grammar setting
         config.use_json_grammar = self.settings_dialog.use_json_grammar_checkbox.isChecked()
 
+        # Parse skip folders from text (semicolon or newline separated)
+        skip_folders_text = self.settings_dialog.skip_folders_text
+        if skip_folders_text:
+            # Split by newlines first, then by semicolons
+            folders = []
+            for line in skip_folders_text.split('\n'):
+                for folder in line.split(';'):
+                    folder = folder.strip()
+                    if folder:
+                        folders.append(folder)
+            config.skip_folders = folders
+
         self.indexer_thread = IndexerThread(config)
         self.indexer_thread.output_received.connect(self.update_output)
         self.indexer_thread.image_processed.connect(self.update_image_preview)
@@ -1158,7 +1205,6 @@ class ImageIndexerGUI(QMainWindow):
         self.output_area.append("Running Image Indexer...")
         self.run_button.setEnabled(False)
         self.pause_button.setEnabled(True)
-        self.skip_button.setEnabled(True)
         self.stop_button.setEnabled(True)
 
     def set_paused(self, paused):
@@ -1179,24 +1225,17 @@ class ImageIndexerGUI(QMainWindow):
             self.pause_button.setText("Pause")
             self.update_output("Indexer resumed.")
 
-    def skip_directory(self):
-        if self.indexer_thread:
-            self.indexer_thread.skip_current = True
-            self.update_output("Skipping current directory...")
-
     def stop_indexer(self):
         self.pause_handler.stop_signal.emit()
         self.update_output("Stopping indexer...")
         self.run_button.setEnabled(True)
         self.pause_button.setEnabled(False)
-        self.skip_button.setEnabled(False)
         self.stop_button.setEnabled(False)
 
     def indexer_finished(self):
         self.update_output("\nImage Indexer finished.")
         self.run_button.setEnabled(True)
         self.pause_button.setEnabled(False)
-        self.skip_button.setEnabled(False)
         self.stop_button.setEnabled(False)
         self.pause_button.setText("Pause")
 
