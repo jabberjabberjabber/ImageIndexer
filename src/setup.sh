@@ -1,7 +1,7 @@
 #!/bin/bash
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REQUIREMENTS_FILE="$SCRIPT_DIR/../requirements.txt"
-VENV_NAME="llmii_env"
+VENV_NAME="SCRIPT_DIR/llmii_env"
 
 # Function to check if a command exists
 command_exists() {
@@ -86,7 +86,7 @@ fi
 python3 -m pip install --upgrade pip
 
 echo "Installing packages from requirements.txt..."
-pip install -r requirements.txt
+pip install -r "$REQUIREMENTS_FILE"
 if [ $? -ne 0 ]; then
     echo "Failed to install some packages. Please check your internet connection and requirements.txt file."
 	read -p "Press Enter to exit..."
