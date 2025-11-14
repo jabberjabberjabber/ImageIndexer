@@ -1,7 +1,7 @@
 #!/bin/bash
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REQUIREMENTS_FILE="$SCRIPT_DIR/../requirements.txt"
-VENV_NAME="SCRIPT_DIR/llmii_env"
+VENV_NAME="$SCRIPT_DIR/llmii_env"
 
 # Function to check if a command exists
 command_exists() {
