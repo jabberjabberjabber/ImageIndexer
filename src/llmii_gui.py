@@ -357,7 +357,9 @@ class SettingsDialog(QDialog):
         self.skip_verify_checkbox = QCheckBox("No file validation")
         self.quick_fail_checkbox = QCheckBox("No retries")
         self.use_sidecar_checkbox = QCheckBox("Use metadata sidecar file instead of writing to image")
-        self.write_unsafe_checkbox = QCheckBox("Use unsafe flag when writing metadata")        
+        self.rename_invalid_checkbox = QCheckBox("Rename files that cannot be processed to .invalid")
+        self.preserve_date_checkbox = QCheckBox("Preserve file modification date (may create temp files)")
+        #self.write_unsafe_checkbox = QCheckBox("Use unsafe flag when writing metadata")
         options_layout.addWidget(self.no_crawl_checkbox)
         options_layout.addWidget(self.reprocess_all_checkbox)
         options_layout.addWidget(self.reprocess_failed_checkbox)
@@ -367,7 +369,9 @@ class SettingsDialog(QDialog):
         options_layout.addWidget(self.skip_verify_checkbox)
         options_layout.addWidget(self.quick_fail_checkbox)
         options_layout.addWidget(self.use_sidecar_checkbox)
-        options_layout.addWidget(self.write_unsafe_checkbox)
+        options_layout.addWidget(self.rename_invalid_checkbox)
+        options_layout.addWidget(self.preserve_date_checkbox)
+        #options_layout.addWidget(self.write_unsafe_checkbox)
         
         options_group.setLayout(options_layout)
         scroll_layout.addWidget(options_group)
@@ -483,7 +487,9 @@ class SettingsDialog(QDialog):
                 self.skip_verify_checkbox.setChecked(settings.get('skip_verify', False))
                 self.quick_fail_checkbox.setChecked(settings.get('quick_fail', False))
                 self.use_sidecar_checkbox.setChecked(settings.get('use_sidecar', False))
-                self.write_unsafe_checkbox.setChecked(settings.get('write_unsafe', False))
+                self.rename_invalid_checkbox.setChecked(settings.get('rename_invalid', False))
+                self.preserve_date_checkbox.setChecked(settings.get('preserve_date', False))
+                #self.write_unsafe_checkbox.setChecked(settings.get('write_unsafe', False))
                 self.caption_instruction_input.setText(settings.get('caption_instruction', 'Describe the image in detail. Be specific.'))
                 self.tag_instruction_input.setText(settings.get('tag_instruction', 'Return a JSON object with key Keywords with the value as array of Keywords and tags that describe the image as follows: {"Keywords": []}'))
                 
@@ -547,7 +553,9 @@ class SettingsDialog(QDialog):
             'no_caption': self.no_caption_radio.isChecked(),
             'update_caption': self.update_caption_checkbox.isChecked(),
             'use_sidecar': self.use_sidecar_checkbox.isChecked(),
-            'write_unsafe': self.write_unsafe_checkbox.isChecked(),
+            'rename_invalid': self.rename_invalid_checkbox.isChecked(),
+            'preserve_date': self.preserve_date_checkbox.isChecked(),
+            #'write_unsafe': self.write_unsafe_checkbox.isChecked(),
             'depluralize_keywords': self.depluralize_checkbox.isChecked(),
             'limit_word_count': self.word_limit_checkbox.isChecked(),
             'max_words_per_keyword': self.word_limit_spinbox.value(),
@@ -1150,7 +1158,9 @@ class ImageIndexerGUI(QMainWindow):
         config.skip_verify = self.settings_dialog.skip_verify_checkbox.isChecked()
         config.quick_fail = self.settings_dialog.quick_fail_checkbox.isChecked()
         config.use_sidecar = self.settings_dialog.use_sidecar_checkbox.isChecked()
-        config.write_unsafe = self.settings_dialog.write_unsafe_checkbox.isChecked()
+        config.rename_invalid = self.settings_dialog.rename_invalid_checkbox.isChecked()
+        config.preserve_date = self.settings_dialog.preserve_date_checkbox.isChecked()
+        #config.write_unsafe = self.settings_dialog.write_unsafe_checkbox.isChecked()
         config.normalize_keywords = True
         config.depluralize_keywords = self.settings_dialog.depluralize_checkbox.isChecked()
         config.limit_word_count = self.settings_dialog.word_limit_checkbox.isChecked()

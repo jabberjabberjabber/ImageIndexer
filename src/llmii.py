@@ -404,7 +404,9 @@ class Config:
         self.use_default_badwordsids = False
         self.use_json_grammar = False
         self.skip_folders = []
-        self.write_unsafe = False
+        self.rename_invalid = False
+        self.preserve_date = False
+        #self.write_unsafe = False
 
         self.instruction = """Return a JSON object containing a Description for the image and a list of Keywords.
 
@@ -524,7 +526,7 @@ Use ENGLISH only. Generate ONLY a JSON object with the keys Description and Keyw
             "--normalize-keywords", action="store_true", help="Enable keyword normalization"
         )
         parser.add_argument("--res-limit", type=int, default=448, help="Limit the resolution of the image")
-        parser.add_argument("--write-unsafe", type="store_true", help="Use exiftool unsafe flag to write metadata")
+        #parser.add_argument("--write-unsafe", type="store_true", help="Use exiftool unsafe flag to write metadata")
         args = parser.parse_args()
 
         config = cls()
@@ -683,26 +685,6 @@ class BackgroundIndexer(threading.Thread):
         self.total_files_found = 0
         self.indexing_complete = False
         self.chunk_size = chunk_size
-        self.checkpoint_path = os.path.join(root_dir, ".llmii_checkpoint")
-        self.last_processed_dir = self._load_checkpoint()
-        
-    def _load_checkpoint(self):
-        """Load directory checkpoint if it exists"""
-        if os.path.exists(self.checkpoint_path):
-            try:
-                with open(self.checkpoint_path, 'r') as f:
-                    return f.read().strip()
-            except:
-                return None
-        return None
-        
-    def _save_checkpoint(self, directory):
-        """Save current directory as checkpoint"""
-        try:
-            with open(self.checkpoint_path, 'w') as f:
-                f.write(directory)
-        except:
-            pass
 
     def _should_skip_directory(self, directory):
         """Check if directory should be skipped based on skip_folders list"""
@@ -757,7 +739,6 @@ class BackgroundIndexer(threading.Thread):
                     
             for i in range(start_idx, len(directories)):
                 self._index_directory(directories[i])
-                self._save_checkpoint(directories[i])
                 
         self.indexing_complete = True
 
@@ -873,29 +854,84 @@ class FileProcessor:
             skip_folders=skip_folders
         )
         
-        self.file_checkpoint_path = os.path.join(config.directory, ".llmii_file_checkpoint")
-        self.last_processed_file = self._load_file_checkpoint()
-        
         self.indexer.start()
-        
-    def _load_file_checkpoint(self):
-        """Load file processing checkpoint if it exists"""
-        if os.path.exists(self.file_checkpoint_path):
-            try:
-                with open(self.file_checkpoint_path, 'r') as f:
-                    return f.read().strip()
-            except:
-                return None
-        return None
-        
-    def _save_file_checkpoint(self, file_path):
-        """Save current file as checkpoint"""
+
+    def rename_to_invalid(self, file_path):
+        """ Rename a file to filename_ext.invalid
+            Returns True if successful, False otherwise
+        """
         try:
-            with open(self.file_checkpoint_path, 'w') as f:
-                f.write(file_path)
-        except:
-            pass
-    
+            # Clean up any exiftool temporary and backup files first
+            dir_name = os.path.dirname(file_path)
+            base_name = os.path.basename(file_path)
+
+            # Look for various exiftool temporary file patterns
+            # Standard pattern: filename_exiftool_tmp
+            exiftool_tmp = file_path + "_exiftool_tmp"
+            if os.path.exists(exiftool_tmp):
+                try:
+                    os.remove(exiftool_tmp)
+                    self.callback(f"Cleaned up temporary file: {os.path.basename(exiftool_tmp)}")
+                except Exception as e:
+                    self.callback(f"Could not remove temp file {os.path.basename(exiftool_tmp)}: {str(e)}")
+
+            # Check for backup files created by exiftool when -overwrite_original is not used
+            # These have _original suffix
+            backup_file = file_path + "_original"
+            if os.path.exists(backup_file):
+                # If the main file doesn't exist but the backup does, this IS the file to rename
+                if not os.path.exists(file_path):
+                    file_path = backup_file
+                    base_name = os.path.basename(backup_file)
+                else:
+                    # Both exist - remove the backup
+                    try:
+                        os.remove(backup_file)
+                        self.callback(f"Cleaned up backup file: {os.path.basename(backup_file)}")
+                    except Exception as e:
+                        self.callback(f"Could not remove backup file <{os.path.basename(backup_file)}>: {str(e)}")
+
+            # Check if the file to rename exists
+            if not os.path.exists(file_path):
+                self.callback(f"File no longer exists, cannot rename: {base_name}")
+                return False
+
+            # Replace dots with underscores except the last one, then add .invalid
+            # Format: filename_ext.invalid or filename_ext(N).invalid for duplicates
+            name_parts = base_name.rsplit('.', 1)
+            if len(name_parts) == 2:
+                base_invalid_name = f"{name_parts[0]}_{name_parts[1]}"
+            else:
+                base_invalid_name = base_name
+
+            new_path = os.path.join(dir_name, f"{base_invalid_name}.invalid")
+
+            # If a file with this name already exists, add a counter in parentheses
+            counter = 1
+            original_new_path = new_path
+            while os.path.exists(new_path):
+                new_name_with_counter = f"{base_invalid_name}({counter}).invalid"
+                new_path = os.path.join(dir_name, new_name_with_counter)
+                counter += 1
+                # Safety limit to avoid infinite loop
+                if counter > 1000:
+                    self.callback(f"Too many duplicate .invalid files, cannot rename: {base_name}")
+                    return False
+
+            # Rename the file
+            os.rename(file_path, new_path)
+            if new_path != original_new_path:
+                self.callback(f"Renamed invalid file: {base_name} -> {os.path.basename(new_path)} (duplicate name)")
+                print(f"Invalid or corrupt file <{base_name}> renamed to <{os.path.basename(new_path)}> (duplicate name)")
+            else:
+                self.callback(f"Renamed invalid file: {base_name} -> {os.path.basename(new_path)}")
+                print(f"Invalid or corrupt file <{base_name}> renamed to <{os.path.basename(new_path)}>")
+            return True
+        except Exception as e:
+            self.callback(f"Failed to rename invalid file <{file_path}>: {str(e)}")
+            print(f"Failed: {str(e)}")
+            return False
+
     def process_directory(self, directory):
         try:
             while not (self.indexer.indexing_complete and self.metadata_queue.empty()):
@@ -906,19 +942,6 @@ class FileProcessor:
                     directory, files = self.metadata_queue.get(timeout=1)
                     self.callback(f"Processing directory: {directory}")
                     self.callback(f"---")
-
-                    # If we have a last processed file checkpoint, find where to resume
-                    if self.last_processed_file:
-                        try:
-                            resume_idx = files.index(self.last_processed_file) + 1
-                            # Only skip if we haven't processed the entire directory yet
-                            if resume_idx < len(files):
-                                self.callback(f"Resuming from file: {self.last_processed_file}")
-                                files = files[resume_idx:]
-                            self.last_processed_file = None  # Reset after finding
-                        except ValueError:
-                            # File not in this batch, process normally
-                            pass
 
                     batch_size = 50
                     for i in range(0, len(files), batch_size):
@@ -938,10 +961,15 @@ class FileProcessor:
                                         source_file = metadata.get("SourceFile")
                                         # ExifTool will give 3 results for validation: minor, warning, error
                                         # If there are warnings but they are all minor, we don't care
-                                        if (errors > 0) or (warnings > minor):
-                                            print(f"Skipped due to file validation failure: {source_file}")
-                                            self.callback(f"\nSkipped due to metadata validation failure: {source_file}")
+                                        #if not errors and (warnings > minor):
+                                        #    print(f"Warning, validation shows possible issues with {source_file}")
+                                            
+                                        if errors > 0:
+                                            print(f"Error, validation failed: {source_file}")
+                                            self.callback(f"\nValidation failed: {source_file}")
                                             self.failed_validations.append(source_file)
+                                            if self.config.rename_invalid:
+                                                self.rename_to_invalid(source_file)
                                             self.callback(f"---")
                                             self.files_processed +=1
                                             continue
@@ -983,14 +1011,7 @@ class FileProcessor:
 
                                 self.files_processed += 1
 
-                                # Save checkpoint before processing file
-                                self._save_file_checkpoint(new_metadata["SourceFile"])
-
                                 self.process_file(new_metadata)
-
-                                # Clear checkpoint after successful processing
-                                if os.path.exists(self.file_checkpoint_path):
-                                    os.remove(self.file_checkpoint_path)
 
                             if self.check_pause_stop():
                                 return
@@ -1138,7 +1159,6 @@ class FileProcessor:
             
         except Exception as e:
             print("Exiftool error")
-            
             return []
 
     def update_progress(self):
@@ -1158,7 +1178,7 @@ class FileProcessor:
         """
         try:    
             
-            
+            success = True
             file_path = metadata["SourceFile"]
                 
             # If the file doesn't exist anymore, skip it
@@ -1177,9 +1197,25 @@ class FileProcessor:
                 self.callback(f"---")
                 return
                 
+                
             start_time = time.time()
-            
-            processed_image, image_path = self.image_processor.process_image(file_path)
+
+            try:
+                processed_image, image_path = self.image_processor.process_image(file_path)
+            except Exception as e:
+                self.callback(f"Image processing error for {file_path}: {str(e)}")
+                if self.config.rename_invalid:
+                    self.rename_to_invalid(file_path)
+                self.callback(f"---")
+                return
+
+            if not processed_image:
+                self.callback(f"Failed to process image: {file_path}")
+                if self.config.rename_invalid:
+                    self.rename_to_invalid(file_path)
+                self.callback(f"---")
+                return
+
             updated_metadata = self.generate_metadata(metadata, processed_image)
            
             status = updated_metadata.get("XMP:Status")
@@ -1187,24 +1223,25 @@ class FileProcessor:
             # Retry one time if failed
             if not self.config.quick_fail and status == "retry":
                 print(f"Retrying {file_path} once")
-                self.callback(f"Retrying {file_path}...")
+                self.callback(f"Asking AI to try again for {file_path}...")
                 self.callback(f"---")
                 updated_metadata = self.generate_metadata(metadata, processed_image)      
                 status = updated_metadata.get("XMP:Status")
             
             # If retry didn't work, mark failed
             if not status == "success":
-                print(f"failed: {file_path}")
-                self.callback(f"Retry failed: {file_path}")
+                print(f"Failed. AI could not generate good metadata: {file_path}")
+                self.callback(f"Retry failed due to AI for {file_path}")
                 self.callback(f"---")
                 metadata["XMP:Status"] = "failed"
                 
                 if not self.config.dry_run:
+                    success = False
                     self.write_metadata(file_path, metadata)
-                return
+                
                 
             # Send image data to callback for GUI display
-            if self.callback and hasattr(self.callback, '__call__'):
+            if self.callback and hasattr(self.callback, '__call__') and success:
                 
                 # Create a dictionary with image data for GUI
                 image_data = {
@@ -1214,13 +1251,20 @@ class FileProcessor:
                     'keywords': updated_metadata.get('MWG:Keywords', []),
                     'file_path': file_path
                 }
-                
+                 
                 self.callback(image_data)    
                 
-            if not self.config.dry_run:
-                self.write_metadata(file_path, updated_metadata)
-                
-            print(f"{status}: {file_path}")
+            if not self.config.dry_run and success:
+                write_success = self.write_metadata(file_path, updated_metadata)
+                if write_success:    
+                    print(f"{status}: {file_path}")
+                    success = True
+                else:
+                    success = False
+                    print(f"Could not write new metadata to file: {file_path}") 
+                    self.callback(f"Failed writing metadata for {file_path}")
+                    self.callback(f"---")
+                    
             end_time = time.time()
             processing_time = end_time - start_time
             self.total_processing_time += processing_time
@@ -1241,7 +1285,7 @@ class FileProcessor:
             
             if in_queue < 0:
                 in_queue = 0
-            if status == "success":
+            if success:
                  
                 self.callback(f"<b>Image:</b> {os.path.basename(file_path)}")
                 self.callback(f"<b>Status:</b> {status}")
@@ -1258,7 +1302,7 @@ class FileProcessor:
                 return
             
         except Exception as e:
-            print(f"Error processing: {file_path}: {str(e)}")
+            print(f"Error. {file_path} could not be processed: {str(e)}")
             self.callback(f"<b>Error processing:</b> {file_path}: {str(e)}")
             self.callback(f"---")
             return
@@ -1349,27 +1393,51 @@ class FileProcessor:
         """Write metadata using persistent ExifTool instance"""
         if self.config.dry_run:
             print("Dry run. Not writing.")
-            
+
             return True
 
+        # Keep track of original file path for error handling
+        original_file_path = file_path
+
         try:
-            params = ["-P"]
-            
+            # -m: ignore minor errors
+            params = ["-m"]
+
+            # -P: preserve file modification date (can cause temp files)
+            if self.config.preserve_date:
+                params.append("-P")
+
+            # Overwrite in place to avoid temp files when no_backup is set, or when using sidecar
             if self.config.no_backup or self.config.use_sidecar:
                 params.append("-overwrite_original")
+
             if self.config.use_sidecar:
                 file_path = file_path + ".xmp"
-            if self.config.write_unsafe:
-                params.append("-unsafe")
+            #if self.config.write_unsafe:
+                #params.append("-unsafe")
             # Use existing ExifTool instance
             self.et.set_tags(file_path, tags=metadata, params=params)
-            
+
             return True
-            
+
         except Exception as e:
-            self.callback(f"\nError writing metadata to {file_path}: {str(e)}")
-            print(f"\nError writing to {file_path}: {str(e)}")
-            self.callback(f"---")
+            self.callback(f"\nError writing metadata: {str(e)}")
+            print(f"Could not write metadata: {str(e)}")
+            if self.config.rename_invalid:
+                # Rename the original image file, not the sidecar
+                print(f"Attempting to rename the file {original_file_path}")
+                self.rename_to_invalid(original_file_path)
+                # Also clean up the sidecar if it exists
+                if self.config.use_sidecar:
+                    sidecar_path = original_file_path + ".xmp"
+                    if os.path.exists(sidecar_path):
+                        try:
+                            os.remove(sidecar_path)
+                            self.callback(f"Removed incomplete sidecar file")
+                        except:
+                            pass
+            #print(f"\nError: {str(e)}")
+            #self.callback(f"---")
             return False 
     
     def process_keywords(self, metadata, new_keywords):

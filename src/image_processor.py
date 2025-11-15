@@ -11,7 +11,7 @@ from pillow_heif import register_heif_opener
 class ImageProcessor:
     def __init__(self, max_dimension: int = 1024,
                  patch_sizes: Optional[List[int]] = None,
-                 max_file_size: int = 50 * 1024 * 1024):
+                 max_file_size: int = 100 * 1024 * 1024):
         
         if max_dimension <= 0:
             raise ValueError("max_dimension must be positive")
@@ -144,7 +144,7 @@ class ImageProcessor:
                     return base64.b64encode(buffer.getvalue()).decode()
                     
         except (IOError, OSError) as e:
-            raise ValueError(f"Image processing failed: {str(e)}")
+            raise ValueError(f"{str(e)}")
             
         return None
         
