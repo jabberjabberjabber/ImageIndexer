@@ -229,8 +229,8 @@ def select_model():
     print()
     print("******************************************************")
     print("** AFTER SELECTING A MODEL AN EXIT CODE WILL APPEAR **")
+    print("**                                                  **")
     print("**              THIS IS NOT AN ERROR                **")
-    print("**        CLOSE THIS WINDOW WHEN YOU ARE DONE       **")
     print("******************************************************")
     print()
 

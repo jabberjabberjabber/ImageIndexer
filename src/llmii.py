@@ -404,6 +404,7 @@ class Config:
         self.use_default_badwordsids = False
         self.use_json_grammar = False
         self.skip_folders = []
+        self.write_unsafe = False
 
         self.instruction = """Return a JSON object containing a Description for the image and a list of Keywords.
 
@@ -523,6 +524,7 @@ Use ENGLISH only. Generate ONLY a JSON object with the keys Description and Keyw
             "--normalize-keywords", action="store_true", help="Enable keyword normalization"
         )
         parser.add_argument("--res-limit", type=int, default=448, help="Limit the resolution of the image")
+        parser.add_argument("--write-unsafe", type="store_true", help="Use exiftool unsafe flag to write metadata")
         args = parser.parse_args()
 
         config = cls()
@@ -1357,7 +1359,8 @@ class FileProcessor:
                 params.append("-overwrite_original")
             if self.config.use_sidecar:
                 file_path = file_path + ".xmp"
-                
+            if self.config.write_unsafe:
+                params.append("-unsafe")
             # Use existing ExifTool instance
             self.et.set_tags(file_path, tags=metadata, params=params)
             
