@@ -6,7 +6,7 @@
         "mmproj_url": "https://huggingface.co/mradermacher/CapRL-3B-GGUF/blob/main/CapRL-3B.mmproj-f16.gguf",
         "description": "High performance, lightweight captioning model based on Qwen2.5-VL. Recommended light model.",
         "size_mb": 3000,
-        "adapter": "chatml",
+        "adapter": "ChatML",
         "flashattention": true
     },
 	{
@@ -16,7 +16,7 @@
         "mmproj_url": "https://huggingface.co/bartowski/google_gemma-3-4b-it-GGUF/blob/main/mmproj-google_gemma-3-4b-it-f16.gguf",
         "description": "Gemma-3 4B is the smallest and fastest release of Gemma-3. Recommended mid-size model.",
         "size_mb": 4800,
-        "adapter": "gemma-3",
+        "adapter": "Gemma",
         "flashattention": false
     },
 	{
@@ -26,7 +26,7 @@
         "mmproj_url": "CapRL-InternVL3.5-8B-mmproj-f16.gguf",
         "description": "Specially trained captioning model based on Qwen3-VL. Recommended large model.",
         "size_mb": 6000,
-        "adapter": "chatml-nothink",
+        "adapter": "ChatML-NoThink",
         "flashattention": true
     },
 	{
@@ -36,7 +36,7 @@
         "mmproj_url": "https://huggingface.co/bartowski/Qwen2-VL-2B-Instruct-GGUF/blob/main/mmproj-Qwen2-VL-2B-Instruct-f16.gguf",
         "description": "Smallest and fastest release of Qwen2-VL.",
         "size_mb": 3120,
-        "adapter": "chatml",
+        "adapter": "ChatML",
         "flashattention": true
     },
 	{
@@ -46,7 +46,7 @@
         "mmproj_url": "https://huggingface.co/bartowski/OpenGVLab_InternVL3_5-8B-GGUF/blob/main/mmproj-OpenGVLab_InternVL3_5-8B-f16.gguf",
         "description": "State of the art model based on Qwen3 / GPT-OSS.",
         "size_mb": 6000,
-        "adapter": "chatml",
+        "adapter": "ChatML",
         "flashattention": true
     },
     {
@@ -56,7 +56,7 @@
         "mmproj_url": "https://huggingface.co/bartowski/Qwen_Qwen2.5-VL-7B-Instruct-GGUF/blob/main/mmproj-Qwen_Qwen2.5-VL-7B-Instruct-f16.gguf",
         "description": "Mid size release of Qwen2.5-VL.",
         "size_mb": 7200,
-        "adapter": "chatml",
+        "adapter": "ChatML",
         "flashattention": true
     },
 	{
@@ -66,7 +66,7 @@
         "mmproj_url": "https://huggingface.co/mradermacher/pixtral-12b-GGUF/blob/main/pixtral-12b.mmproj-f16.gguf",
         "description": "Mistralai's Pixtral fine-tuned for captioning (uncensored).",
         "size_mb": 9700,
-        "adapter": "mistral",
+        "adapter": "Mistral-NonTekken",
         "flashattention": false
     },
     {
@@ -76,7 +76,7 @@
         "mmproj_url": "https://huggingface.co/bartowski/google_gemma-3-12b-it-GGUF/blob/main/mmproj-google_gemma-3-12b-it-f16.gguf",
         "description": "Medium size release of Gemma-3.",
         "size_mb": 9800,
-        "adapter": "gemma-3",
+        "adapter": "Gemma",
         "flashattention": false
     },
 	{
@@ -86,7 +86,7 @@
         "mmproj_url": "https://huggingface.co/bartowski/MiniCPM-V-2_6-GGUF/blob/main/mmproj-MiniCPM-V-2_6-f16.gguf",
         "description": "Old but good image model based on Qwen2.",
         "size_mb": 6800,
-        "adapter": "chatml",
+        "adapter": "ChatML",
         "flashattention": true
     },
 	{
