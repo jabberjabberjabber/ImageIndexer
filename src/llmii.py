@@ -950,35 +950,12 @@ class FileProcessor:
 
                         for metadata in metadata_list:
                             if metadata:
-                                if not self.config.skip_verify:
-                                    # Check ExifTool validation
-                                    if "ExifTool:Validate" in metadata:
-                                        validation_parts = metadata.get("ExifTool:Validate", "0 0 0").split()
-                                        if len(validation_parts) >= 3:
-                                            errors, warnings, minor = map(int, validation_parts[:3])
-                                        else:
-                                            errors, warnings, minor = 0, 0, 0
-                                        source_file = metadata.get("SourceFile")
-                                        # ExifTool will give 3 results for validation: minor, warning, error
-                                        # If there are warnings but they are all minor, we don't care
-                                        #if not errors and (warnings > minor):
-                                        #    print(f"Warning, validation shows possible issues with {source_file}")
-                                            
-                                        if errors > 0:
-                                            print(f"Error, validation failed: {source_file}")
-                                            self.callback(f"\nValidation failed: {source_file}")
-                                            self.failed_validations.append(source_file)
-                                            if self.config.rename_invalid:
-                                                self.rename_to_invalid(source_file)
-                                            self.callback(f"---")
-                                            self.files_processed +=1
-                                            continue
-
                                 # Process metadata
                                 keywords = []
                                 status = None
                                 identifier = None
                                 caption = None
+                                validation_data = None
 
                                 # Make a copy with only the fields we want to write
                                 new_metadata = {}
@@ -988,6 +965,10 @@ class FileProcessor:
                                     metadata["SourceFile"] = os.path.splitext(metadata["SourceFile"])[0]
 
                                 new_metadata["SourceFile"] = metadata.get("SourceFile")
+
+                                # Extract validation data if present
+                                if not self.config.skip_verify and "ExifTool:Validate" in metadata:
+                                    validation_data = metadata.get("ExifTool:Validate")
 
                                 for key, value in metadata.items():
                                     if key in self.keyword_fields:
@@ -1008,6 +989,8 @@ class FileProcessor:
                                     new_metadata["XMP:Status"] = status
                                 if identifier:
                                     new_metadata["XMP:Identifier"] = identifier
+                                if validation_data:
+                                    new_metadata["ExifTool:Validate"] = validation_data
 
                                 self.files_processed += 1
 
@@ -1176,17 +1159,59 @@ class FileProcessor:
         """ Process a file and update its metadata in one operation.
             This minimizes the number of writes to the file.
         """
-        try:    
-            
+        try:
+
             success = True
             file_path = metadata["SourceFile"]
-                
+
             # If the file doesn't exist anymore, skip it
             if not os.path.exists(file_path):
                 self.callback(f"File no longer exists: {file_path}")
                 self.callback(f"---")
                 return
-            
+
+            # Check if file is already marked as invalid - skip it entirely
+            # Unless reprocess_all is enabled
+            current_status = metadata.get("XMP:Status")
+            if current_status == "invalid" and not self.config.reprocess_all:
+                self.callback(f"Skipping file marked as invalid: {file_path}")
+                self.callback(f"---")
+                return
+
+            # Only run validation check for files without a status or if reprocess_all
+            # This prevents re-validating files that are already success/failed/retry/valid
+            should_validate = (not current_status and not self.config.skip_verify) or self.config.reprocess_all 
+
+            if should_validate and "ExifTool:Validate" in metadata:
+                validation_parts = metadata.get("ExifTool:Validate", "0 0 0").split()
+                if len(validation_parts) >= 3:
+                    errors, warnings, minor = map(int, validation_parts[:3])
+                else:
+                    errors, warnings, minor = 0, 0, 0
+
+                # If there are validation errors, mark as invalid and skip
+                if errors > 0:
+                    print(f"Error, validation failed: {file_path}")
+                    self.callback(f"\nValidation failed: {file_path}")
+                    self.failed_validations.append(file_path)
+                    if self.config.rename_invalid:
+                        self.rename_to_invalid(file_path)
+                    self.callback(f"---")
+                    return
+
+                # If there are warnings, test if we can write to the file
+                # This prevents wasting LLM processing on unwritable files
+                if (warnings > 0) and (minor >= warnings):
+                    test_metadata = {"SourceFile": file_path, "XMP:Status": "valid"}
+                    if not self.write_metadata(file_path, test_metadata):
+                        print(f"Error, metadata be written: {file_path}")
+                        self.callback(f"\nMetadata is not writable: {file_path}")
+                        self.failed_validations.append(file_path)
+                        self.callback(f"---")
+                        return
+                    # File is writable, update metadata to reflect valid status
+                    metadata["XMP:Status"] = "valid"
+
             metadata = self.check_uuid(metadata, file_path)
             if not metadata:
                 return
@@ -1261,9 +1286,9 @@ class FileProcessor:
                     success = True
                 else:
                     success = False
-                    print(f"Could not write new metadata to file: {file_path}") 
-                    self.callback(f"Failed writing metadata for {file_path}")
-                    self.callback(f"---")
+                    #print(f"Could not write new metadata to file: {file_path}") 
+                    #self.callback(f"Failed writing metadata for {file_path}")
+                    #self.callback(f"---")
                     
             end_time = time.time()
             processing_time = end_time - start_time
