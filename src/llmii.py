@@ -526,7 +526,8 @@ Use ENGLISH only. Generate ONLY a JSON object with the keys Description and Keyw
             "--normalize-keywords", action="store_true", help="Enable keyword normalization"
         )
         parser.add_argument("--res-limit", type=int, default=448, help="Limit the resolution of the image")
-        #parser.add_argument("--write-unsafe", type="store_true", help="Use exiftool unsafe flag to write metadata")
+        parser.add_argument("--rename-invalid", type="store_true", help="Use rename invalid files so they don't get reprocessed")
+        parser.add_argument("--preserve-date", type="store_true", help="Keep the original modified date, but will use a temp file when writing")
         args = parser.parse_args()
 
         config = cls()
