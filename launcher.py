@@ -196,9 +196,13 @@ def launch_model():
         if system == "Windows":
             _kobold_process = subprocess.Popen(cmd, cwd=working_dir, creationflags=subprocess.CREATE_NEW_CONSOLE)
         elif system == "Darwin":
-            # macOS
-            cmd_str = ' '.join([f'"{arg}"' for arg in cmd])
-            applescript = f'tell application "Terminal" to do script "cd \\"{working_dir}\\" && {cmd_str}"'
+            # macOS - escape quotes for AppleScript
+            def escape_applescript(s):
+                return str(s).replace('\\', '\\\\').replace('"', '\\"')
+
+            cmd_str = ' '.join([f'\\"{escape_applescript(arg)}\\"' for arg in cmd])
+            working_dir_escaped = escape_applescript(working_dir)
+            applescript = f'tell application "Terminal" to do script "cd \\"{working_dir_escaped}\\" && {cmd_str}"'
             subprocess.run(["osascript", "-e", applescript])
             # Save exe name for cleanup
             _kobold_process = exe_path.name
