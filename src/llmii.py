@@ -1181,9 +1181,9 @@ class FileProcessor:
 
             # Only run validation check for files without a status or if reprocess_all
             # This prevents re-validating files that are already success/failed/retry/valid
-            should_validate = (not current_status and not self.config.skip_verify) or self.config.reprocess_all 
+            should_validate = (not current_status or self.config.reprocess_all) and not self.config.skip_verify
 
-            if should_validate and "ExifTool:Validate" in metadata:
+            if should_validate:
                 validation_parts = metadata.get("ExifTool:Validate", "0 0 0").split()
                 if len(validation_parts) >= 3:
                     errors, warnings, minor = map(int, validation_parts[:3])

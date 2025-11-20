@@ -413,6 +413,10 @@ def determine_kobold_filename(gpu_summary):
         if platform.machine() == "arm64":
             return "koboldcpp-mac-arm64"
         else:
+            # Intel Macs are not supported by KoboldCpp pre-built binaries
+            print("Error: Intel Macs are not supported.")
+            print("KoboldCpp only provides pre-built binaries for Apple Silicon (ARM64) Macs.")
+            print("Please use an Apple Silicon Mac or build KoboldCpp from source.")
             return None
     
     elif system == "Linux":
@@ -463,6 +467,15 @@ def download_kobold(gpu_summary, existing_executable):
     base_url = "https://github.com/LostRuins/koboldcpp/releases/latest/download/"
     version_file = os.path.join(RESOURCES_DIR, "version.txt")
     download_filename = determine_kobold_filename(gpu_summary)
+
+    if download_filename is None:
+        print("Error: Could not determine appropriate KoboldCpp executable for your system.")
+        if existing_executable:
+            print(f"Using existing executable: {existing_executable}")
+            return existing_executable
+        else:
+            raise FileNotFoundError("No compatible KoboldCpp executable available for your system")
+
     download_url = base_url + download_filename
     
     extension = '.exe' if download_filename.endswith('.exe') else ''
@@ -1104,11 +1117,19 @@ class SetupApp:
             #)
             print(f"CUDA {gpu_summary['cuda_version']} detected with {gpu_summary['total_vram_mb']}MB VRAM")
         existing_executable = manage_kobold_executable()
-        
+
         if update:
             #progress_dialog.update_progress("Getting KoboldCPP executable...", 60)
-            gpu_summary["executable_path"] = download_kobold(gpu_summary, existing_executable)
-        
+            try:
+                gpu_summary["executable_path"] = download_kobold(gpu_summary, existing_executable)
+            except Exception as e:
+                print(f"Failed to download executable: {e}")
+                if existing_executable:
+                    print(f"Using existing executable: {existing_executable}")
+                    gpu_summary["executable_path"] = existing_executable
+                else:
+                    QMessageBox.critical(None, "Error", f"Failed to download KoboldCpp executable: {e}")
+                    return None
         else:
             gpu_summary["executable_path"] = existing_executable
         
@@ -1175,9 +1196,12 @@ class SetupApp:
     def run(self, update=False):
         """Run the entire setup process"""
         try:
-            
+
             gpu_summary = self.run_setup(update)
-            
+
+            if gpu_summary is None:
+                return 1
+
             selected_model = self.show_model_selection(gpu_summary)
             if not selected_model:
                 print("Model selection cancelled.")
