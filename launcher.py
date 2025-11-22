@@ -145,7 +145,7 @@ def run_gui():
     # Qt doesn't like being started multiple times in the same process
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "src.llmii_gui"],
+            ["uv", "run", "python", "-m", "src.llmii_gui"],
             cwd=SCRIPT_DIR
         )
     except Exception as e:
