@@ -686,6 +686,7 @@ class BackgroundIndexer(threading.Thread):
         self.total_files_found = 0
         self.indexing_complete = False
         self.chunk_size = chunk_size
+        self.last_processed_dir = None
 
     def _should_skip_directory(self, directory):
         """Check if directory should be skipped based on skip_folders list"""
@@ -726,17 +727,7 @@ class BackgroundIndexer(threading.Thread):
                     directories.append(dir_path)
 
             directories.sort()
-
-            # Skip to last processed directory if resuming
             start_idx = 0
-            if self.last_processed_dir:
-                try:
-                    start_idx = directories.index(self.last_processed_dir) + 1
-                    # If already completed the last directory, just start from beginning
-                    if start_idx >= len(directories):
-                        start_idx = 0
-                except ValueError:
-                    start_idx = 0
                     
             for i in range(start_idx, len(directories)):
                 self._index_directory(directories[i])
