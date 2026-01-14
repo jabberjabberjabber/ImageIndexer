@@ -359,6 +359,7 @@ class SettingsDialog(QDialog):
         self.use_sidecar_checkbox = QCheckBox("Use metadata sidecar file instead of writing to image")
         self.rename_invalid_checkbox = QCheckBox("Rename files that cannot be processed to .invalid")
         self.preserve_date_checkbox = QCheckBox("Preserve file modification date (may create temp files)")
+        self.fix_extension_checkbox = QCheckBox("Fix file extension if it doesn't match file type")
         #self.write_unsafe_checkbox = QCheckBox("Use unsafe flag when writing metadata")
         options_layout.addWidget(self.no_crawl_checkbox)
         options_layout.addWidget(self.reprocess_all_checkbox)
@@ -371,6 +372,7 @@ class SettingsDialog(QDialog):
         options_layout.addWidget(self.use_sidecar_checkbox)
         options_layout.addWidget(self.rename_invalid_checkbox)
         options_layout.addWidget(self.preserve_date_checkbox)
+        options_layout.addWidget(self.fix_extension_checkbox)
         #options_layout.addWidget(self.write_unsafe_checkbox)
         
         options_group.setLayout(options_layout)
@@ -489,6 +491,7 @@ class SettingsDialog(QDialog):
                 self.use_sidecar_checkbox.setChecked(settings.get('use_sidecar', False))
                 self.rename_invalid_checkbox.setChecked(settings.get('rename_invalid', False))
                 self.preserve_date_checkbox.setChecked(settings.get('preserve_date', False))
+                self.fix_extension_checkbox.setChecked(settings.get('fix_extension', False))
                 #self.write_unsafe_checkbox.setChecked(settings.get('write_unsafe', False))
                 self.caption_instruction_input.setText(settings.get('caption_instruction', 'Describe the image in detail. Be specific.'))
                 self.tag_instruction_input.setText(settings.get('tag_instruction', 'Return a JSON object with key Keywords with the value as array of Keywords and tags that describe the image as follows: {"Keywords": []}'))
@@ -555,6 +558,7 @@ class SettingsDialog(QDialog):
             'use_sidecar': self.use_sidecar_checkbox.isChecked(),
             'rename_invalid': self.rename_invalid_checkbox.isChecked(),
             'preserve_date': self.preserve_date_checkbox.isChecked(),
+            'fix_extension': self.fix_extension_checkbox.isChecked(),
             #'write_unsafe': self.write_unsafe_checkbox.isChecked(),
             'depluralize_keywords': self.depluralize_checkbox.isChecked(),
             'limit_word_count': self.word_limit_checkbox.isChecked(),
@@ -1160,6 +1164,7 @@ class ImageIndexerGUI(QMainWindow):
         config.use_sidecar = self.settings_dialog.use_sidecar_checkbox.isChecked()
         config.rename_invalid = self.settings_dialog.rename_invalid_checkbox.isChecked()
         config.preserve_date = self.settings_dialog.preserve_date_checkbox.isChecked()
+        config.fix_extension = self.settings_dialog.fix_extension_checkbox.isChecked()
         #config.write_unsafe = self.settings_dialog.write_unsafe_checkbox.isChecked()
         config.normalize_keywords = True
         config.depluralize_keywords = self.settings_dialog.depluralize_checkbox.isChecked()

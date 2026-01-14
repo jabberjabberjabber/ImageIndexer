@@ -406,6 +406,7 @@ class Config:
         self.skip_folders = []
         self.rename_invalid = False
         self.preserve_date = False
+        self.fix_extension = False
         #self.write_unsafe = False
 
         self.instruction = """Return a JSON object containing a Description for the image and a list of Keywords.
@@ -654,25 +655,42 @@ class LLMProcessor:
             }
             if self.api_password:
                 headers["Authorization"] = f"Bearer {self.api_password}"
-            
+
             response = self.requests.post(
                 endpoint,
                 json=payload,
                 headers=headers
             )
-            
+
             response.raise_for_status()
             response_json = response.json()
-            
+
             if "choices" in response_json and len(response_json["choices"]) > 0:
                 if "message" in response_json["choices"][0]:
-                    return response_json["choices"][0]["message"]["content"]
+                    content = response_json["choices"][0]["message"]["content"]
+                    print(f"  Received response from API ({len(content)} chars)")
+                    return content
                 else:
-                    return response_json["choices"][0].get("text", "")
+                    content = response_json["choices"][0].get("text", "")
+                    print(f"  Received response from API ({len(content)} chars)")
+                    return content
+            print(f"  Warning: API response missing expected data")
             return None
             
+        except requests.exceptions.ConnectionError as e:
+            print(f"API Connection Error: Cannot connect to {self.api_url}")
+            print(f"  Make sure the LLM server is running and accessible")
+            return None
+        except requests.exceptions.Timeout as e:
+            print(f"API Timeout Error: Request to {self.api_url} timed out")
+            return None
+        except requests.exceptions.HTTPError as e:
+            print(f"API HTTP Error: {e.response.status_code} - {str(e)}")
+            if hasattr(e.response, 'text'):
+                print(f"  Response: {e.response.text[:200]}")
+            return None
         except Exception as e:
-            print(f"Error in API call: {str(e)}")
+            print(f"API Error: {type(e).__name__} - {str(e)}")
             return None
 
 class BackgroundIndexer(threading.Thread):
@@ -717,6 +735,7 @@ class BackgroundIndexer(threading.Thread):
     def run(self):
         if self.no_crawl:
             if not self._should_skip_directory(self.root_dir):
+                print(f"Indexing directory (no crawl): {self.root_dir}")
                 self._index_directory(self.root_dir)
         else:
             # Get ordered list of directories to process
@@ -727,11 +746,13 @@ class BackgroundIndexer(threading.Thread):
                     directories.append(dir_path)
 
             directories.sort()
+            print(f"Found {len(directories)} director(ies) to index")
             start_idx = 0
-                    
+
             for i in range(start_idx, len(directories)):
                 self._index_directory(directories[i])
-                
+
+        print(f"Indexing complete. Total files found: {self.total_files_found}")
         self.indexing_complete = True
 
     def _index_directory(self, directory):
@@ -792,8 +813,10 @@ class FileProcessor:
         self.files_completed = 0
         
         self.image_processor = ImageProcessor(max_dimension=self.config.res_limit, patch_sizes=[14])
-        
+
+        print("Initializing ExifTool...")
         self.et = exiftool.ExifToolHelper(encoding='utf-8')
+        print("ExifTool initialized successfully")
         
         # Words in the prompt tend to get repeated back by certain models
         self.banned_words = ["no", "unspecified", "unknown", "unidentified", "identify", "topiary", "themes concepts", "items animals", "animals objects", "structures landmarks", "Foreground and background", "notable colors", "textures styles", "actions activities", "physical appearance", "Gender", "Age range", "visibly apparent", "apparent ancestry", "Occupation/role", "Relationships between individuals", "Emotions expressions", "body language"]
@@ -829,6 +852,10 @@ class FileProcessor:
         self.status_fields = [
             "Status",
             "XMP:Status"
+        ]
+        self.filetype_fields = [
+            "File:FileType",
+            "File:FileTypeExtension"
         ]
         
         self.image_extensions = config.image_extensions
@@ -924,6 +951,57 @@ class FileProcessor:
             print(f"Failed: {str(e)}")
             return False
 
+    def fix_file_extension(self, file_path, expected_ext):
+        """ Fix file extension if it doesn't match the expected extension from metadata.
+            Returns the new file path if renamed, or the original path if no change needed.
+        """
+        if not expected_ext:
+            return file_path
+
+        # Normalize the expected extension (lowercase, with leading dot)
+        expected_ext = expected_ext.lower()
+        if not expected_ext.startswith('.'):
+            expected_ext = '.' + expected_ext
+
+        # Get current extension
+        current_ext = os.path.splitext(file_path)[1].lower()
+
+        # If they match, no change needed
+        if current_ext == expected_ext:
+            return file_path
+
+        try:
+            # Build new path with correct extension
+            base_path = os.path.splitext(file_path)[0]
+            new_path = base_path + expected_ext
+
+            # Check if target path already exists
+            counter = 1
+            original_new_path = new_path
+            while os.path.exists(new_path):
+                new_path = f"{base_path}({counter}){expected_ext}"
+                counter += 1
+                if counter > 1000:
+                    self.callback(f"Too many files with same name, cannot rename: {os.path.basename(file_path)}")
+                    return file_path
+
+            # Rename the file
+            os.rename(file_path, new_path)
+
+            if new_path != original_new_path:
+                print(f"Fixed extension: {os.path.basename(file_path)} -> {os.path.basename(new_path)} (duplicate name)")
+                self.callback(f"Fixed extension: {os.path.basename(file_path)} -> {os.path.basename(new_path)}")
+            else:
+                print(f"Fixed extension: {os.path.basename(file_path)} -> {os.path.basename(new_path)}")
+                self.callback(f"Fixed extension: {os.path.basename(file_path)} -> {os.path.basename(new_path)}")
+
+            return new_path
+
+        except Exception as e:
+            self.callback(f"Failed to fix extension for {file_path}: {str(e)}")
+            print(f"Extension fix failed: {str(e)}")
+            return file_path
+
     def process_directory(self, directory):
         try:
             while not (self.indexer.indexing_complete and self.metadata_queue.empty()):
@@ -938,6 +1016,8 @@ class FileProcessor:
                     batch_size = 50
                     for i in range(0, len(files), batch_size):
                         batch = files[i:i+batch_size]
+                        if len(batch) > 0:
+                            print(f"Reading metadata for {len(batch)} file(s)...")
                         metadata_list = self._get_metadata_batch(batch)
 
                         for metadata in metadata_list:
@@ -962,6 +1042,8 @@ class FileProcessor:
                                 if not self.config.skip_verify and "ExifTool:Validate" in metadata:
                                     validation_data = metadata.get("ExifTool:Validate")
 
+                                filetype = None
+                                filetype_ext = None
                                 for key, value in metadata.items():
                                     if key in self.keyword_fields:
                                         keywords.extend(value)
@@ -971,6 +1053,10 @@ class FileProcessor:
                                         identifier = value
                                     if key in self.status_fields:
                                         status = value
+                                    if key == "File:FileType":
+                                        filetype = value
+                                    if key == "File:FileTypeExtension":
+                                        filetype_ext = value
 
                                 # Standardize the fields
                                 if keywords:
@@ -983,6 +1069,10 @@ class FileProcessor:
                                     new_metadata["XMP:Identifier"] = identifier
                                 if validation_data:
                                     new_metadata["ExifTool:Validate"] = validation_data
+                                if filetype:
+                                    new_metadata["File:FileType"] = filetype
+                                if filetype_ext:
+                                    new_metadata["File:FileTypeExtension"] = filetype_ext
 
                                 self.files_processed += 1
 
@@ -1109,7 +1199,7 @@ class FileProcessor:
         """ Get metadata for a batch of files
             using persistent ExifTool instance.
         """
-        exiftool_fields = self.keyword_fields + self.caption_fields + self.identifier_fields + self.status_fields 
+        exiftool_fields = self.keyword_fields + self.caption_fields + self.identifier_fields + self.status_fields + self.filetype_fields
         
         try:
             if self.config.skip_verify:
@@ -1132,8 +1222,16 @@ class FileProcessor:
                 files = xmp_files
             return self.et.get_tags(files, tags=exiftool_fields, params=params)
             
+        except exiftool.exceptions.ExifToolExecuteError as e:
+            print(f"ExifTool Execute Error: {str(e)}")
+            self.callback(f"ExifTool execute error - check if files are accessible")
+            return []
+        except exiftool.exceptions.ExifToolVersionError as e:
+            print(f"ExifTool Version Error: {str(e)}")
+            print("  Please update ExifTool to a compatible version")
+            return []
         except Exception as e:
-            print("Exiftool error")
+            print(f"ExifTool Error: {type(e).__name__} - {str(e)}")
             return []
 
     def update_progress(self):
@@ -1183,8 +1281,10 @@ class FileProcessor:
 
                 # If there are validation errors, mark as invalid and skip
                 if errors > 0:
-                    print(f"Error, validation failed: {file_path}")
+                    print(f"Validation Failed: {os.path.basename(file_path)}")
+                    print(f"  Errors: {errors}, Warnings: {warnings}, Minor: {minor}")
                     self.callback(f"\nValidation failed: {file_path}")
+                    self.callback(f"  Errors: {errors}, Warnings: {warnings}, Minor: {minor}")
                     self.failed_validations.append(file_path)
                     if self.config.rename_invalid:
                         self.rename_to_invalid(file_path)
@@ -1194,13 +1294,16 @@ class FileProcessor:
                 # If there are warnings, test if we can write to the file
                 # This prevents wasting LLM processing on unwritable files
                 if (warnings > 0) and (minor >= warnings):
+                    print(f"File has validation warnings: {os.path.basename(file_path)}")
+                    print(f"  Warnings: {warnings}, Minor: {minor} - Testing writeability...")
                     test_metadata = {"SourceFile": file_path, "XMP:Status": "valid"}
                     if not self.write_metadata(file_path, test_metadata):
-                        print(f"Error, metadata be written: {file_path}")
+                        print(f"  Metadata cannot be written to file")
                         self.callback(f"\nMetadata is not writable: {file_path}")
                         self.failed_validations.append(file_path)
                         self.callback(f"---")
                         return
+                    print(f"  File is writable - proceeding")
                     # File is writable, update metadata to reflect valid status
                     metadata["XMP:Status"] = "valid"
 
@@ -1213,13 +1316,18 @@ class FileProcessor:
                 self.callback(f"Not a supported image type: {file_path}")
                 self.callback(f"---")
                 return
-                
-                
+
+            filetype = metadata.get("File:FileType", image_type)
+            print(f"Processing: {os.path.basename(file_path)} [{filetype}]")
+
             start_time = time.time()
 
             try:
                 processed_image, image_path = self.image_processor.process_image(file_path)
             except Exception as e:
+                print(f"Image Processing Error: {os.path.basename(file_path)}")
+                print(f"  Error type: {type(e).__name__}")
+                print(f"  Details: {str(e)}")
                 self.callback(f"Image processing error for {file_path}: {str(e)}")
                 if self.config.rename_invalid:
                     self.rename_to_invalid(file_path)
@@ -1227,6 +1335,8 @@ class FileProcessor:
                 return
 
             if not processed_image:
+                print(f"Image Processing Failed: {os.path.basename(file_path)}")
+                print(f"  Could not generate base64 image data")
                 self.callback(f"Failed to process image: {file_path}")
                 if self.config.rename_invalid:
                     self.rename_to_invalid(file_path)
@@ -1239,15 +1349,17 @@ class FileProcessor:
             
             # Retry one time if failed
             if not self.config.quick_fail and status == "retry":
-                print(f"Retrying {file_path} once")
+                print(f"AI Generation Issue - Retrying: {os.path.basename(file_path)}")
+                print(f"  Reason: No valid keywords generated on first attempt")
                 self.callback(f"Asking AI to try again for {file_path}...")
                 self.callback(f"---")
-                updated_metadata = self.generate_metadata(metadata, processed_image)      
+                updated_metadata = self.generate_metadata(metadata, processed_image)
                 status = updated_metadata.get("XMP:Status")
-            
+
             # If retry didn't work, mark failed
             if not status == "success":
-                print(f"Failed. AI could not generate good metadata: {file_path}")
+                print(f"AI Generation Failed: {os.path.basename(file_path)}")
+                print(f"  The AI could not generate valid keywords after retry")
                 self.callback(f"Retry failed due to AI for {file_path}")
                 self.callback(f"---")
                 metadata["XMP:Status"] = "failed"
@@ -1257,9 +1369,18 @@ class FileProcessor:
                     self.write_metadata(file_path, metadata)
                 
                 
+            # Fix file extension if enabled (before writing metadata)
+            if self.config.fix_extension and success:
+                expected_ext = metadata.get("File:FileTypeExtension")
+                if expected_ext:
+                    new_file_path = self.fix_file_extension(file_path, expected_ext)
+                    if new_file_path != file_path:
+                        file_path = new_file_path
+                        updated_metadata["SourceFile"] = file_path
+
             # Send image data to callback for GUI display
             if self.callback and hasattr(self.callback, '__call__') and success:
-                
+
                 # Create a dictionary with image data for GUI
                 image_data = {
                     'type': 'image_data',
@@ -1268,13 +1389,13 @@ class FileProcessor:
                     'keywords': updated_metadata.get('MWG:Keywords', []),
                     'file_path': file_path
                 }
-                 
-                self.callback(image_data)    
-                
+
+                self.callback(image_data)
+
             if not self.config.dry_run and success:
                 write_success = self.write_metadata(file_path, updated_metadata)
-                if write_success:    
-                    print(f"{status}: {file_path}")
+                if write_success:
+                    print(f"  Metadata written successfully")
                     success = True
                 else:
                     success = False
@@ -1319,7 +1440,9 @@ class FileProcessor:
                 return
             
         except Exception as e:
-            print(f"Error. {file_path} could not be processed: {str(e)}")
+            print(f"Processing Error: {os.path.basename(file_path)}")
+            print(f"  Error type: {type(e).__name__}")
+            print(f"  Details: {str(e)}")
             self.callback(f"<b>Error processing:</b> {file_path}: {str(e)}")
             self.callback(f"---")
             return
@@ -1345,9 +1468,10 @@ class FileProcessor:
         file_path = metadata["SourceFile"]
         
         try:
-            
+
             # Determine whether to generate caption, keywords, or both
             if not self.config.no_caption and self.config.detailed_caption:
+                print(f"  Generating keywords and detailed caption...")
                 data = clean_tags(self.llm_processor.describe_content(task="keywords", processed_image=processed_image))
                 detailed_caption = clean_string(self.llm_processor.describe_content(task="caption", processed_image=processed_image))               
                 
@@ -1362,8 +1486,10 @@ class FileProcessor:
                    
             else:
                 if self.config.no_caption:
+                    print(f"  Generating keywords only...")
                     data = clean_tags(self.llm_processor.describe_content(task="keywords", processed_image=processed_image))
-                else:    
+                else:
+                    print(f"  Generating caption and keywords...")
                     data = clean_json(self.llm_processor.describe_content(task="caption_and_keywords", processed_image=processed_image))
                          
                 if isinstance(data, dict):
@@ -1385,11 +1511,15 @@ class FileProcessor:
                             caption = ""
                         
             if not keywords:
+                print(f"No Keywords Generated: {os.path.basename(file_path)}")
+                print(f"  AI response did not contain valid keywords")
                 status = "retry"
-                            
+
             else:
                 status = "success"
                 keywords = self.process_keywords(metadata, keywords)
+                if keywords:
+                    print(f"Generated {len(keywords)} keyword(s) for: {os.path.basename(file_path)}")
 
             new_metadata["MWG:Description"] = caption
             new_metadata["MWG:Keywords"] = keywords
@@ -1400,10 +1530,13 @@ class FileProcessor:
             return new_metadata
             
         except Exception as e:
+            print(f"Metadata Generation Error: {os.path.basename(file_path)}")
+            print(f"  Error type: {type(e).__name__}")
+            print(f"  Details: {str(e)}")
             self.callback(f"Parse error for {file_path}: {str(e)}")
             self.callback(f"---")
             metadata["XMP:Status"] = "retry"
-            
+
             return metadata
             
     def write_metadata(self, file_path, metadata):
@@ -1438,11 +1571,14 @@ class FileProcessor:
             return True
 
         except Exception as e:
+            error_type = type(e).__name__
+            print(f"Metadata Write Error: {os.path.basename(original_file_path)}")
+            print(f"  Error type: {error_type}")
+            print(f"  Details: {str(e)}")
             self.callback(f"\nError writing metadata: {str(e)}")
-            print(f"Could not write metadata: {str(e)}")
             if self.config.rename_invalid:
                 # Rename the original image file, not the sidecar
-                print(f"Attempting to rename the file {original_file_path}")
+                print(f"  Renaming file to .invalid")
                 self.rename_to_invalid(original_file_path)
                 # Also clean up the sidecar if it exists
                 if self.config.use_sidecar:
