@@ -22,8 +22,8 @@
 	{
         "model": "CapRL-InternVL3.5-8B (4bit)",
         "config": "caprl-internvl3.5-8b.kcpps",
-        "language_url": "CapRL-InternVL3.5-8B-Q4_K_M.gguf",
-        "mmproj_url": "CapRL-InternVL3.5-8B-mmproj-f16.gguf",
+        "language_url": "https://huggingface.co/Jobaar/CapRL-InternVL3.5-8B-GGUF/resolve/main/CapRL-InternVL3.5-8B-Q4_K_M.gguf",
+        "mmproj_url": "https://huggingface.co/Jobaar/CapRL-InternVL3.5-8B-GGUF/resolve/main/CapRL-InternVL3.5-8B-mmproj-bf16.gguf",
         "description": "Specially trained captioning model based on Qwen3-VL. Recommended large model.",
         "size_mb": 6000,
         "adapter": "ChatML-NoThink",
