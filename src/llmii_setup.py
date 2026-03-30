@@ -628,7 +628,7 @@ def setup_koboldcpp_terminal(model, gpu_summary):
 
     # Build command with conditional flashattention flag
     flashattention_flag = "--flashattention " if use_flashattention else ""
-    full_command = f"{executable_path} {kobold_args['model_param']} --mmproj {kobold_args['mmproj']} {flashattention_flag}--contextsize {kobold_args['contextsize']} --visionmaxres 9999 --chatcompletionsadapter {kobold_args['chatcompletionsadapter']}"
+    full_command = f"{executable_path} {kobold_args['model_param']} --mmproj {kobold_args['mmproj']} {flashattention_flag}--contextsize {kobold_args['contextsize']} --visionmaxres 9999 --nofastforward --singleinstance --chatcompletionsadapter {kobold_args['chatcompletionsadapter']}"
 
     try:
         with open(full_command_path, "w") as f:

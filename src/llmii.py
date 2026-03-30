@@ -394,7 +394,7 @@ class Config:
         self.system_instruction = "You are a helpful assistant."
         self.keyword_instruction = ""
         self.tag_instruction = 'Return a JSON object with key Keywords with the value as array of Keywords and tags that describe the image as follows: {"Keywords": []}' 
-
+        self.no_extension_sidecar = False
         # Sampler settings
         self.temperature = 0.2
         self.top_p = 1.0
@@ -529,6 +529,8 @@ Use ENGLISH only. Generate ONLY a JSON object with the keys Description and Keyw
         parser.add_argument("--res-limit", type=int, default=448, help="Limit the resolution of the image")
         parser.add_argument("--rename-invalid", type="store_true", help="Use rename invalid files so they don't get reprocessed")
         parser.add_argument("--preserve-date", type="store_true", help="Keep the original modified date, but will use a temp file when writing")
+        args = parser.parse_args()
+        parser.add_argument("--no-extension-sidecar", type="store_true", help="Does not add the image file extension to sidecard filenames")
         args = parser.parse_args()
 
         config = cls()
@@ -1215,8 +1217,11 @@ class FileProcessor:
                     
                     # Check for files named file.ext.xmp for sidecar
                     if os.path.exists(file + ".xmp"):
-                       xmp_files.append(file  + ".xmp")
-
+                        xmp_files.append(file  + ".xmp")
+                    # Check for files named file.xmp
+                    elif os.path.exists(os.path.splitext(file)[0] + ".xmp"):
+                        if os.path.splitext(file)[0] + ".xmp" not in xmp_files:
+                            xmp_files.append(os.path.splitext(file)[0] + ".xmp")
                     else:
                         xmp_files.append(file)
                 files = xmp_files
@@ -1562,7 +1567,10 @@ class FileProcessor:
                 params.append("-overwrite_original")
 
             if self.config.use_sidecar:
-                file_path = file_path + ".xmp"
+                if self.config.no_extension_sidecar:
+                    file_path = os.path.splitext(file_path)[0] + ".xmp"
+                else:
+                    file_path = file_path + ".xmp"
             #if self.config.write_unsafe:
                 #params.append("-unsafe")
             # Use existing ExifTool instance
@@ -1582,7 +1590,10 @@ class FileProcessor:
                 self.rename_to_invalid(original_file_path)
                 # Also clean up the sidecar if it exists
                 if self.config.use_sidecar:
-                    sidecar_path = original_file_path + ".xmp"
+                    if self.config.no_extension_sidecar:
+                        sidecar_path = os.path.splitext(original_file_path)[0] + ".xmp"
+                    else:
+                        sidecar_path = original_file_path + ".xmp"
                     if os.path.exists(sidecar_path):
                         try:
                             os.remove(sidecar_path)

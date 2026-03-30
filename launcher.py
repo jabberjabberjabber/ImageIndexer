@@ -148,6 +148,9 @@ def run_gui():
             ["uv", "run", "python", "-m", "src.llmii_gui"],
             cwd=SCRIPT_DIR
         )
+        if result.returncode != 0:
+            print(f"{Colors.RED}GUI exited with code {result.returncode}.{Colors.NC}")
+            input("Press Enter to continue...")
     except Exception as e:
         print(f"{Colors.RED}GUI failed to launch: {e}{Colors.NC}")
         input("Press Enter to continue...")

@@ -1,10 +1,51 @@
 [
-    {
+	{
+		"model": "Qwen3.5 0.8B (8bit)",
+        "config": "qwen3.5-0.8b-q8.kcpps",
+        "language_url": "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q8_0.gguf",
+        "mmproj_url": "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/mmproj-F16.gguf",
+        "description": "Tiny Qwen 3.5 vision model",
+        "size_mb": 1200,
+        "adapter": "ChatML",
+        "flashattention": true
+    },
+	{
+		"model": "Qwen3.5 2B (6bit)",
+        "config": "qwen3.5-2b-q6.kcpps",
+        "language_url": "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q6_K.gguf",
+        "mmproj_url": "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/mmproj-F16.gguf",
+        "description": "Small Qwen 3.5 vision model",
+        "size_mb": 2200,
+        "adapter": "ChatML",
+        "flashattention": true
+    },
+	{
+		"model": "Qwen3.5 4B (6bit)",
+        "config": "qwen3.5-4b-q6.kcpps",
+        "language_url": "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q6_K.gguf",
+        "mmproj_url": "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/mmproj-F16.gguf",
+        "description": "Medium Qwen 3.5 vision model",
+        "size_mb": 3500,
+        "adapter": "ChatML",
+        "flashattention": true
+    },
+	{
+		"model": "Qwen3.5 9B (4bit)",
+        "config": "qwen3.5-9b-q4.kcpps",
+        "language_url": "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf",
+        "mmproj_url": "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/mmproj-F16.gguf",
+        "description": "Large size Qwen 3.5 vision model",
+        "size_mb": 7500,
+        "adapter": "ChatML",
+        "flashattention": true
+    },
+	
+	{
         "model": "CapRL-3B (6bit)",
         "config": "caprl-3b.kcpps",
         "language_url": "https://huggingface.co/mradermacher/CapRL-3B-GGUF/blob/main/CapRL-3B.Q6_K.gguf",
         "mmproj_url": "https://huggingface.co/mradermacher/CapRL-3B-GGUF/blob/main/CapRL-3B.mmproj-f16.gguf",
-        "description": "High performance, lightweight captioning model based on Qwen2.5-VL. Recommended light model.",
+        "description": "High performance, lightweight captioning model based on Qwen2.5-VL",
         "size_mb": 3000,
         "adapter": "ChatML",
         "flashattention": true
@@ -14,7 +55,7 @@
         "config": "gemma-3-4b-q6.kcpps",
         "language_url": "https://huggingface.co/bartowski/google_gemma-3-4b-it-GGUF/blob/main/google_gemma-3-4b-it-Q6_K.gguf",
         "mmproj_url": "https://huggingface.co/bartowski/google_gemma-3-4b-it-GGUF/blob/main/mmproj-google_gemma-3-4b-it-f16.gguf",
-        "description": "Gemma-3 4B is the smallest and fastest release of Gemma-3. Recommended mid-size model.",
+        "description": "Gemma-3 4B is the smallest and fastest release of Gemma-3",
         "size_mb": 4800,
         "adapter": "Gemma",
         "flashattention": false
@@ -24,19 +65,9 @@
         "config": "caprl-internvl3.5-8b.kcpps",
         "language_url": "https://huggingface.co/Jobaar/CapRL-InternVL3.5-8B-GGUF/resolve/main/CapRL-InternVL3.5-8B-Q4_K_M.gguf",
         "mmproj_url": "https://huggingface.co/Jobaar/CapRL-InternVL3.5-8B-GGUF/resolve/main/CapRL-InternVL3.5-8B-mmproj-bf16.gguf",
-        "description": "Specially trained captioning model based on Qwen3-VL. Recommended large model.",
+        "description": "Specially trained captioning model based on Qwen3-VL",
         "size_mb": 6000,
         "adapter": "ChatML-NoThink",
-        "flashattention": true
-    },
-	{
-        "model": "Qwen2-VL 2B (6bit)",
-        "config": "qwen2-vl-2b-q6.kcpps",
-        "language_url": "https://huggingface.co/bartowski/Qwen2-VL-2B-Instruct-GGUF/blob/main/Qwen2-VL-2B-Instruct-Q6_K.gguf",
-        "mmproj_url": "https://huggingface.co/bartowski/Qwen2-VL-2B-Instruct-GGUF/blob/main/mmproj-Qwen2-VL-2B-Instruct-f16.gguf",
-        "description": "Smallest and fastest release of Qwen2-VL.",
-        "size_mb": 3120,
-        "adapter": "ChatML",
         "flashattention": true
     },
 	{
@@ -44,7 +75,7 @@
         "config": "internvl3.5-8b.kcpps",
         "language_url": "https://huggingface.co/bartowski/OpenGVLab_InternVL3_5-8B-GGUF/blob/main/OpenGVLab_InternVL3_5-8B-Q4_K_M.gguf",
         "mmproj_url": "https://huggingface.co/bartowski/OpenGVLab_InternVL3_5-8B-GGUF/blob/main/mmproj-OpenGVLab_InternVL3_5-8B-f16.gguf",
-        "description": "State of the art model based on Qwen3 / GPT-OSS.",
+        "description": "Based on Qwen3 / GPT-OSS.",
         "size_mb": 6000,
         "adapter": "ChatML",
         "flashattention": true
