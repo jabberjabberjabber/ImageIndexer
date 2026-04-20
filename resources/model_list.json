@@ -6,7 +6,7 @@
         "mmproj_url": "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/mmproj-F16.gguf",
         "description": "Tiny Qwen 3.5 vision model",
         "size_mb": 1200,
-        "adapter": "ChatML",
+        "adapter": "ChatML-N",
         "flashattention": true
     },
 	{
@@ -16,7 +16,7 @@
         "mmproj_url": "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/mmproj-F16.gguf",
         "description": "Small Qwen 3.5 vision model",
         "size_mb": 2200,
-        "adapter": "ChatML",
+        "adapter": "ChatML-NoThink",
         "flashattention": true
     },
 	{
@@ -26,7 +26,7 @@
         "mmproj_url": "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/mmproj-F16.gguf",
         "description": "Medium Qwen 3.5 vision model",
         "size_mb": 3500,
-        "adapter": "ChatML",
+        "adapter": "ChatML-NoThink",
         "flashattention": true
     },
 	{
@@ -36,7 +36,7 @@
         "mmproj_url": "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/mmproj-F16.gguf",
         "description": "Large size Qwen 3.5 vision model",
         "size_mb": 7500,
-        "adapter": "ChatML",
+        "adapter": "ChatML-NoThink",
         "flashattention": true
     },
 	
