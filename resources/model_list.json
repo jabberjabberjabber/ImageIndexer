@@ -6,7 +6,7 @@
         "mmproj_url": "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/mmproj-F16.gguf",
         "description": "Tiny Qwen 3.5 vision model",
         "size_mb": 1200,
-        "adapter": "ChatML-N",
+        "adapter": "ChatML-NoThink",
         "flashattention": true
     },
 	{
