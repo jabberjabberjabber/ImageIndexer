@@ -375,7 +375,7 @@ class Config:
         self.gen_count = 250
         self.res_limit = 448
         self.detailed_caption = False
-        self.short_caption = True
+        self.short_caption = False
         self.skip_verify = False
         self.quick_fail = False
         self.no_caption = False
@@ -527,10 +527,9 @@ Use ENGLISH only. Generate ONLY a JSON object with the keys Description and Keyw
             "--normalize-keywords", action="store_true", help="Enable keyword normalization"
         )
         parser.add_argument("--res-limit", type=int, default=448, help="Limit the resolution of the image")
-        parser.add_argument("--rename-invalid", type="store_true", help="Use rename invalid files so they don't get reprocessed")
-        parser.add_argument("--preserve-date", type="store_true", help="Keep the original modified date, but will use a temp file when writing")
-        args = parser.parse_args()
-        parser.add_argument("--no-extension-sidecar", type="store_true", help="Does not add the image file extension to sidecard filenames")
+        parser.add_argument("--rename-invalid", action="store_true", help="Use rename invalid files so they don't get reprocessed")
+        parser.add_argument("--preserve-date", action="store_true", help="Keep the original modified date, but will use a temp file when writing")
+        parser.add_argument("--no-extension-sidecar", action="store_true", help="Does not add the image file extension to sidecard filenames")
         args = parser.parse_args()
 
         config = cls()
@@ -841,7 +840,7 @@ class FileProcessor:
             "Composite:Description",
             "Caption",
             "IPTC:Caption",
-            "Composite:Caption"
+            "Composite:Caption",
             "IPTC:Caption-Abstract",
             "XMP-dc:Description",
             "PNG:Description"
@@ -1036,7 +1035,20 @@ class FileProcessor:
 
                                 # Check if we actually have a sidecar in the path
                                 if self.config.use_sidecar and metadata["SourceFile"].lower().endswith(".xmp"):
-                                    metadata["SourceFile"] = os.path.splitext(metadata["SourceFile"])[0]
+                                    source = metadata["SourceFile"]
+                                    if self.config.no_extension_sidecar:
+                                        # image.xmp -> need to find the actual image file
+                                        base = os.path.splitext(source)[0]
+                                        # find matching image file with any supported extension
+                                        for exts in self.image_extensions.values():
+                                            for ext in exts:
+                                                candidate = base + ext
+                                                if os.path.exists(candidate):
+                                                    metadata["SourceFile"] = candidate
+                                                    break
+                                    else:
+                                        # image.jpg.xmp -> image.jpg
+                                        metadata["SourceFile"] = os.path.splitext(source)[0]
 
                                 new_metadata["SourceFile"] = metadata.get("SourceFile")
 
@@ -1048,9 +1060,13 @@ class FileProcessor:
                                 filetype_ext = None
                                 for key, value in metadata.items():
                                     if key in self.keyword_fields:
-                                        keywords.extend(value)
+                                        if isinstance(value, list):
+                                            keywords.extend(value)
+                                        else:
+                                            keywords.append(value)
                                     if key in self.caption_fields:
-                                        caption = value
+                                        if caption is None:
+                                            caption = value
                                     if key in self.identifier_fields:
                                         identifier = value
                                     if key in self.status_fields:
@@ -1131,11 +1147,11 @@ class FileProcessor:
                     try:
                         written = self.write_metadata(file_path, metadata)
                         
-                        if written and not self.config.reprocess_all:
-                            
-                            print(f"Status added for orphan: {file_path}")  
+                        if written:
+                            print(f"Status added for orphan: {file_path}")
                             self.callback(f"Status added for orphan: {file_path}")
-                            
+                            if not self.config.reprocess_all:
+                                return None
                         else:
                             print(f"Metadata write error for orphan: {file_path}")
                             self.callback(f"Metadata write error for orphan: {file_path}")
@@ -1217,7 +1233,8 @@ class FileProcessor:
                     
                     # Check for files named file.ext.xmp for sidecar
                     if os.path.exists(file + ".xmp"):
-                        xmp_files.append(file  + ".xmp")
+                        if file + ".xmp" not in xmp_files:
+                            xmp_files.append(file + ".xmp")
                     # Check for files named file.xmp
                     elif os.path.exists(os.path.splitext(file)[0] + ".xmp"):
                         if os.path.splitext(file)[0] + ".xmp" not in xmp_files:
@@ -1490,7 +1507,7 @@ class FileProcessor:
                     keywords = data.get("Keywords")
                    
             else:
-                if self.config.no_caption:
+                if self.config.no_caption or not self.config.short_caption:
                     print(f"  Generating keywords only...")
                     data = clean_tags(self.llm_processor.describe_content(task="keywords", processed_image=processed_image))
                 else:

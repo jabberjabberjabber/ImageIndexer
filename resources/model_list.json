@@ -3,17 +3,17 @@
 		"model": "Qwen3.5 0.8B (8bit)",
         "config": "qwen3.5-0.8b-q8.kcpps",
         "language_url": "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q8_0.gguf",
-        "mmproj_url": "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/mmproj-F16.gguf",
+        "mmproj_url": "https://huggingface.co/bartowski/Qwen_Qwen3.5-0.8B-GGUF/resolve/main/mmproj-Qwen_Qwen3.5-0.8B-f16.gguf",
         "description": "Tiny Qwen 3.5 vision model",
         "size_mb": 1200,
-        "adapter": "ChatML-NoThink",
+        "adapter": "ChatML-Nothink",
         "flashattention": true
     },
 	{
 		"model": "Qwen3.5 2B (6bit)",
         "config": "qwen3.5-2b-q6.kcpps",
         "language_url": "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q6_K.gguf",
-        "mmproj_url": "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/mmproj-F16.gguf",
+        "mmproj_url": "https://huggingface.co/bartowski/Qwen_Qwen3.5-2B-GGUF/resolve/main/mmproj-Qwen_Qwen3.5-2B-f16.gguf",
         "description": "Small Qwen 3.5 vision model",
         "size_mb": 2200,
         "adapter": "ChatML-NoThink",
@@ -23,7 +23,7 @@
 		"model": "Qwen3.5 4B (6bit)",
         "config": "qwen3.5-4b-q6.kcpps",
         "language_url": "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q6_K.gguf",
-        "mmproj_url": "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/mmproj-F16.gguf",
+        "mmproj_url": "https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF/resolve/main/mmproj-Qwen_Qwen3.5-4B-f16.gguf",
         "description": "Medium Qwen 3.5 vision model",
         "size_mb": 3500,
         "adapter": "ChatML-NoThink",
@@ -33,7 +33,7 @@
 		"model": "Qwen3.5 9B (4bit)",
         "config": "qwen3.5-9b-q4.kcpps",
         "language_url": "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf",
-        "mmproj_url": "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/mmproj-F16.gguf",
+        "mmproj_url": "https://huggingface.co/bartowski/Qwen_Qwen3.5-9B-GGUF/resolve/main/mmproj-Qwen_Qwen3.5-9B-f16.gguf",
         "description": "Large size Qwen 3.5 vision model",
         "size_mb": 7500,
         "adapter": "ChatML-NoThink",
@@ -108,26 +108,6 @@
         "description": "Medium size release of Gemma-3.",
         "size_mb": 9800,
         "adapter": "Gemma",
-        "flashattention": false
-    },
-	{
-        "model": "MiniCPM-V 2.6 (4 bit)",
-        "config": "minicpm-v-2_6-q4.kcpps",
-        "language_url": "https://huggingface.co/bartowski/MiniCPM-V-2_6-GGUF/blob/main/MiniCPM-V-2_6-Q4_K_M.gguf",
-        "mmproj_url": "https://huggingface.co/bartowski/MiniCPM-V-2_6-GGUF/blob/main/mmproj-MiniCPM-V-2_6-f16.gguf",
-        "description": "Old but good image model based on Qwen2.",
-        "size_mb": 6800,
-        "adapter": "ChatML",
-        "flashattention": true
-    },
-	{
-        "model": "SmolVLM2 2B (6 bit)",
-        "config": "smolvlm2-3b.kcpps",
-        "language_url": "https://huggingface.co/mradermacher/SmolVLM2-2.2B-Instruct-GGUF/blob/main/SmolVLM2-2.2B-Instruct.Q6_K.gguf",
-        "mmproj_url": "https://huggingface.co/ggml-org/SmolVLM2-2.2B-Instruct-GGUF/blob/main/mmproj-SmolVLM2-2.2B-Instruct-f16.gguf",
-		"description": "Lightweight model for compute limited devices. Tends to have to retry a lot.",
-        "size_mb": 2000,
-        "adapter": "./SmolVLM2.json",
         "flashattention": false
     }
 ]
