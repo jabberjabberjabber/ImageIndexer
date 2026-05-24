@@ -394,7 +394,7 @@ class Config:
         self.system_instruction = "You are a helpful assistant."
         self.keyword_instruction = ""
         self.tag_instruction = 'Return a JSON object with key Keywords with the value as array of Keywords and tags that describe the image as follows: {"Keywords": []}' 
-        self.no_extension_sidecar = False
+        self.no_sidecar_extension = False
         # Sampler settings
         self.temperature = 0.2
         self.top_p = 1.0
@@ -858,6 +858,9 @@ class FileProcessor:
             "File:FileType",
             "File:FileTypeExtension"
         ]
+        self.orientation_field = [
+            "EXIF:Orientation"
+        ]
         
         self.image_extensions = config.image_extensions
         self.metadata_queue = queue.Queue()
@@ -1036,7 +1039,7 @@ class FileProcessor:
                                 # Check if we actually have a sidecar in the path
                                 if self.config.use_sidecar and metadata["SourceFile"].lower().endswith(".xmp"):
                                     source = metadata["SourceFile"]
-                                    if self.config.no_extension_sidecar:
+                                    if self.config.no_sidecar_extension:
                                         # image.xmp -> need to find the actual image file
                                         base = os.path.splitext(source)[0]
                                         # find matching image file with any supported extension
@@ -1055,7 +1058,8 @@ class FileProcessor:
                                 # Extract validation data if present
                                 if not self.config.skip_verify and "ExifTool:Validate" in metadata:
                                     validation_data = metadata.get("ExifTool:Validate")
-
+                                
+                                orientation = 1
                                 filetype = None
                                 filetype_ext = None
                                 for key, value in metadata.items():
@@ -1075,7 +1079,9 @@ class FileProcessor:
                                         filetype = value
                                     if key == "File:FileTypeExtension":
                                         filetype_ext = value
-
+                                    if key in self.orientation_field:
+                                        orientation = value
+                                        
                                 # Standardize the fields
                                 if keywords:
                                     new_metadata["MWG:Keywords"] = keywords
@@ -1091,7 +1097,9 @@ class FileProcessor:
                                     new_metadata["File:FileType"] = filetype
                                 if filetype_ext:
                                     new_metadata["File:FileTypeExtension"] = filetype_ext
-
+                                if orientation:
+                                    new_metadata["EXIF:Orientation"] = orientation
+                                    
                                 self.files_processed += 1
 
                                 self.process_file(new_metadata)
@@ -1217,7 +1225,7 @@ class FileProcessor:
         """ Get metadata for a batch of files
             using persistent ExifTool instance.
         """
-        exiftool_fields = self.keyword_fields + self.caption_fields + self.identifier_fields + self.status_fields + self.filetype_fields
+        exiftool_fields = self.keyword_fields + self.caption_fields + self.identifier_fields + self.status_fields + self.filetype_fields + self.orientation_field
         
         try:
             if self.config.skip_verify:
@@ -1343,9 +1351,13 @@ class FileProcessor:
             print(f"Processing: {os.path.basename(file_path)} [{filetype}]")
 
             start_time = time.time()
-
+            
             try:
-                processed_image, image_path = self.image_processor.process_image(file_path)
+                if metadata.get("EXIF:Orientation", False):
+                    orientation = metadata["EXIF:Orientation"]
+                else:
+                    orientation = 1
+                processed_image, image_path = self.image_processor.process_image(file_path, orientation)
             except Exception as e:
                 print(f"Image Processing Error: {os.path.basename(file_path)}")
                 print(f"  Error type: {type(e).__name__}")
@@ -1584,7 +1596,7 @@ class FileProcessor:
                 params.append("-overwrite_original")
 
             if self.config.use_sidecar:
-                if self.config.no_extension_sidecar:
+                if self.config.no_sidecar_extension:
                     file_path = os.path.splitext(file_path)[0] + ".xmp"
                 else:
                     file_path = file_path + ".xmp"
@@ -1607,7 +1619,7 @@ class FileProcessor:
                 self.rename_to_invalid(original_file_path)
                 # Also clean up the sidecar if it exists
                 if self.config.use_sidecar:
-                    if self.config.no_extension_sidecar:
+                    if self.config.no_sidecar_extension:
                         sidecar_path = os.path.splitext(original_file_path)[0] + ".xmp"
                     else:
                         sidecar_path = original_file_path + ".xmp"

@@ -90,10 +90,19 @@ class ImageProcessor:
         if new_width != img.width or new_height != img.height:
             return img.resize((new_width, new_height), Image.Resampling.BICUBIC)
         return img
+        
+    def _apply_orientation(self, img, orientation):
+        """Apply EXIF orientation rotation. Skips mirrored cases (2/4/5/7)."""
+        if orientation == 3:
+            return img.rotate(180, expand=True)
+        elif orientation == 6:
+            return img.rotate(270, expand=True)  # 90 CW = -90 = 270 CCW
+        elif orientation == 8:
+            return img.rotate(90, expand=True)   # 90 CCW
+        return img
 
-    def process_raw_image(self, file_path):
-        """ Process RAW image files
-        """
+    def process_raw_image(self, file_path, orientation=1):
+        """Process RAW image files"""
         with rawpy.imread(file_path) as raw:
             try:
                 # Try to extract embedded JPEG thumbnail first
@@ -101,12 +110,15 @@ class ImageProcessor:
                 if thumb.format == rawpy.ThumbFormat.JPEG:
                     thumb_img = Image.open(io.BytesIO(thumb.data))
                     resized = self._resize_image(thumb_img)
+                    # Thumbnail needs manual orientation; libraw isn't involved here
+                    rotated = self._apply_orientation(resized, orientation)
                     buffer = io.BytesIO()
-                    resized.save(buffer, format="JPEG", quality=95)
+                    rotated.save(buffer, format="JPEG", quality=95)
                     return base64.b64encode(buffer.getvalue()).decode()
             except:
                 pass
 
+            # postprocess() with default user_flip=-1 already applies camera orientation
             rgb = raw.postprocess()
             img = Image.fromarray(rgb)
             resized = self._resize_image(img)
@@ -114,44 +126,46 @@ class ImageProcessor:
             resized.save(buffer, format="JPEG", quality=95)
             return base64.b64encode(buffer.getvalue()).decode()
             
-    def route_image(self, file_path):
-        """ Process image """
+    def route_image(self, file_path, orientation=1):
+        """Process image"""
         if os.path.getsize(file_path) > self.max_file_size:
             raise ValueError(f"File exceeds size limit of {self.max_file_size} bytes")
-            
+
         image_type = self._get_image_type(file_path)
         if image_type is None:
             return None
-            
+
         try:
             if image_type == "RAW":
-                return self.process_raw_image(file_path)
-            
+                return self.process_raw_image(file_path, orientation)
+
             if image_type == "HEIF":
                 register_heif_opener()
-                
+
             with Image.open(file_path) as img:
                 if img.mode != 'RGB':
                     img = img.convert('RGB')
-                    
+
                 if img.width <= 0 or img.height <= 0:
                     raise ValueError("Invalid image dimensions")
-                    
+
                 resized = self._resize_image(img)
-                
+                rotated = self._apply_orientation(resized, orientation)
+
                 with io.BytesIO() as buffer:
-                    resized.save(buffer, format="JPEG", quality=95)
+                    rotated.save(buffer, format="JPEG", quality=95)
                     return base64.b64encode(buffer.getvalue()).decode()
-                    
+
         except (IOError, OSError) as e:
             raise ValueError(f"{str(e)}")
-            
+
         return None
         
-    def process_image(self, file_path):    
+    def process_image(self, file_path, orientation):    
         """ Process an image through the LLM
         """
         file_path = os.path.normpath(file_path)
+        self.orientation = orientation
         encoded = self.route_image(file_path)
         
         if not encoded:

@@ -7,3 +7,4 @@ koboldcpp.exe
 /dev
 *.exe
 resources/kobold_args.json
+/.claude
