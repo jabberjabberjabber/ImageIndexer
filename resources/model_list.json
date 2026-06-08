@@ -1,15 +1,5 @@
 [
 	{
-		"model": "Qwen3.5 0.8B (8bit)",
-        "config": "qwen3.5-0.8b-q8.kcpps",
-        "language_url": "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q8_0.gguf",
-        "mmproj_url": "https://huggingface.co/bartowski/Qwen_Qwen3.5-0.8B-GGUF/resolve/main/mmproj-Qwen_Qwen3.5-0.8B-f16.gguf",
-        "description": "Tiny Qwen 3.5 vision model",
-        "size_mb": 1200,
-        "adapter": "ChatML-Nothink",
-        "flashattention": true
-    },
-	{
 		"model": "Qwen3.5 2B (6bit)",
         "config": "qwen3.5-2b-q6.kcpps",
         "language_url": "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q6_K.gguf",
@@ -77,16 +67,6 @@
         "mmproj_url": "https://huggingface.co/bartowski/OpenGVLab_InternVL3_5-8B-GGUF/blob/main/mmproj-OpenGVLab_InternVL3_5-8B-f16.gguf",
         "description": "Based on Qwen3 / GPT-OSS.",
         "size_mb": 6000,
-        "adapter": "ChatML",
-        "flashattention": true
-    },
-    {
-        "model": "Qwen2.5-VL 7B (4bit)",
-        "config": "qwen2-vl-7b-q4.kcpps",
-        "language_url": "https://huggingface.co/bartowski/Qwen_Qwen2.5-VL-7B-Instruct-GGUF/blob/main/Qwen_Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf",
-        "mmproj_url": "https://huggingface.co/bartowski/Qwen_Qwen2.5-VL-7B-Instruct-GGUF/blob/main/mmproj-Qwen_Qwen2.5-VL-7B-Instruct-f16.gguf",
-        "description": "Mid size release of Qwen2.5-VL.",
-        "size_mb": 7200,
         "adapter": "ChatML",
         "flashattention": true
     },

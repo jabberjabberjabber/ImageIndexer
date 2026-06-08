@@ -73,7 +73,7 @@ class ImageProcessor:
     def _calculate_dimensions(self, width, height):
         """ Calculate dimensions maintaining aspect ratio and patch compatibility 
         """
-        scale = min(self.max_dimension / width, self.max_dimension / height)
+        scale = min(self.max_dimension / width, self.max_dimension / height, 1.0)
         
         scaled_width = width * scale
         scaled_height = height * scale
@@ -92,13 +92,13 @@ class ImageProcessor:
         return img
         
     def _apply_orientation(self, img, orientation):
-        """Apply EXIF orientation rotation. Skips mirrored cases (2/4/5/7)."""
-        if orientation == 3:
+        """Apply EXIF orientation rotation."""
+        if orientation in [3,4]:
             return img.rotate(180, expand=True)
-        elif orientation == 6:
-            return img.rotate(270, expand=True)  # 90 CW = -90 = 270 CCW
-        elif orientation == 8:
-            return img.rotate(90, expand=True)   # 90 CCW
+        elif orientation in [5,6,7]:
+            return img.rotate(270, expand=True)
+        elif orientation in [8]:
+            return img.rotate(90, expand=True)
         return img
 
     def process_raw_image(self, file_path, orientation=1):
@@ -110,15 +110,14 @@ class ImageProcessor:
                 if thumb.format == rawpy.ThumbFormat.JPEG:
                     thumb_img = Image.open(io.BytesIO(thumb.data))
                     resized = self._resize_image(thumb_img)
-                    # Thumbnail needs manual orientation; libraw isn't involved here
                     rotated = self._apply_orientation(resized, orientation)
                     buffer = io.BytesIO()
                     rotated.save(buffer, format="JPEG", quality=95)
                     return base64.b64encode(buffer.getvalue()).decode()
             except:
                 pass
-
-            # postprocess() with default user_flip=-1 already applies camera orientation
+            
+            # Orientation not needed
             rgb = raw.postprocess()
             img = Image.fromarray(rgb)
             resized = self._resize_image(img)
@@ -165,8 +164,8 @@ class ImageProcessor:
         """ Process an image through the LLM
         """
         file_path = os.path.normpath(file_path)
-        self.orientation = orientation
-        encoded = self.route_image(file_path)
+        #self.orientation = orientation
+        encoded = self.route_image(file_path, orientation)
         
         if not encoded:
             return None, file_path

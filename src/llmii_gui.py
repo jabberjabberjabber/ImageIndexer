@@ -141,6 +141,41 @@ class SkipFoldersDialog(QDialog):
     def get_skip_folders(self):
         return self.skip_folders_input.toPlainText()
 
+class BannedWordsDialog(QDialog):
+    def __init__(self, banned_words_list, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Edit Banned Words")
+        self.setModal(True)
+        self.resize(500, 400)
+
+        layout = QVBoxLayout(self)
+
+        help_label = QLabel(
+            "Enter words or phrases to ban from keywords (one per line).\n"
+            "Each entry is matched exactly — 'blue' will not filter 'blueberry'."
+        )
+        help_label.setWordWrap(True)
+        layout.addWidget(help_label)
+
+        self.words_input = QPlainTextEdit()
+        self.words_input.setPlainText("\n".join(banned_words_list))
+        layout.addWidget(QLabel("Banned words/phrases:"))
+        layout.addWidget(self.words_input)
+
+        button_layout = QHBoxLayout()
+        save_button = QPushButton("Save")
+        save_button.clicked.connect(self.accept)
+        cancel_button = QPushButton("Cancel")
+        cancel_button.clicked.connect(self.reject)
+        button_layout.addWidget(save_button)
+        button_layout.addWidget(cancel_button)
+        layout.addLayout(button_layout)
+
+    def get_banned_words(self):
+        lines = self.words_input.toPlainText().splitlines()
+        return [w for w in (line.strip() for line in lines) if w]
+
+
 class SettingsHelpDialog(QDialog):
     """ Dialog that shows help information for all settings """
     
@@ -423,6 +458,9 @@ class SettingsDialog(QDialog):
         self.latin_only_checkbox = QCheckBox("Only Latin characters")
         self.latin_only_checkbox.setChecked(True)
         
+        self.edit_banned_words_button = QPushButton("Edit Banned Words")
+        self.edit_banned_words_button.clicked.connect(self.edit_banned_words)
+
         corrections_layout.addWidget(self.depluralize_checkbox)
         corrections_layout.addLayout(self.word_limit_layout)
         corrections_layout.addWidget(self.split_and_checkbox)
@@ -430,6 +468,7 @@ class SettingsDialog(QDialog):
         corrections_layout.addWidget(self.no_digits_start_checkbox)
         corrections_layout.addWidget(self.min_word_length_checkbox)
         corrections_layout.addWidget(self.latin_only_checkbox)
+        corrections_layout.addWidget(self.edit_banned_words_button)
         
         keyword_corrections_group.setLayout(corrections_layout)
         scroll_layout.addWidget(keyword_corrections_group)
@@ -452,6 +491,7 @@ class SettingsDialog(QDialog):
 
         self.instruction_text = GuiConfig.DEFAULT_INSTRUCTION
         self.skip_folders_text = ""
+        self.banned_words_list = llmii.Config().banned_words
 
         self.load_settings()
     
@@ -469,7 +509,12 @@ class SettingsDialog(QDialog):
         dialog = SkipFoldersDialog(self.skip_folders_text, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.skip_folders_text = dialog.get_skip_folders()
-        
+
+    def edit_banned_words(self):
+        dialog = BannedWordsDialog(self.banned_words_list, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.banned_words_list = dialog.get_banned_words()
+
     def load_settings(self):
         try:
             if os.path.exists('settings.json'):
@@ -483,6 +528,9 @@ class SettingsDialog(QDialog):
                 self.res_limit.setValue(settings.get('res_limit', 448))
                 self.instruction_text = settings.get('instruction', GuiConfig.DEFAULT_INSTRUCTION)
                 self.skip_folders_text = settings.get('skip_folders', '')
+                banned = settings.get('banned_words', None)
+                if isinstance(banned, list):
+                    self.banned_words_list = banned
                 
                 self.no_crawl_checkbox.setChecked(settings.get('no_crawl', False))
                 self.reprocess_failed_checkbox.setChecked(settings.get('reprocess_failed', False))
@@ -543,6 +591,7 @@ class SettingsDialog(QDialog):
             'system_instruction': self.system_instruction_input.text(),
             'instruction': self.instruction_text,
             'skip_folders': self.skip_folders_text,
+            'banned_words': self.banned_words_list,
             'gen_count': self.gen_count.value(),
             'res_limit': self.res_limit.value(),
             'no_crawl': self.no_crawl_checkbox.isChecked(),
@@ -1192,6 +1241,7 @@ class ImageIndexerGUI(QMainWindow):
 
         # Load instruction from settings
         config.instruction = self.settings_dialog.instruction_text
+        config.banned_words = list(self.settings_dialog.banned_words_list)
         
         config.update_keywords = self.settings_dialog.update_keywords_checkbox.isChecked()
         config.update_caption = self.settings_dialog.update_caption_checkbox.isChecked()

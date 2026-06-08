@@ -60,6 +60,7 @@ SETTINGS_HELP = """
 <p><b>Cannot start with 3+ digits:</b> Filter out keywords starting with 3+ digits. <i>3d video</i> would be fine but <i>2024 summer</i> would be rejected.</p>
 <p><b>Words must be 2+ characters:</b> Require words to be at least 2 characters long unless they are <i>x</i> or <i>u</i>.</p>
 <p><b>Only Latin characters:</b> Remove keywords with non-Latin characters.</p>
+<p><b>Edit Banned Words:</b> Opens a dialog to edit the list of words and phrases that are silently dropped from generated keywords. Each entry is matched against the whole keyword — banning <i>cat</i> will not affect <i>category</i>. The default list contains words and phrases that LLMs commonly echo back verbatim from the prompt instructions.</p>
 """
 
 def get_settings_help():

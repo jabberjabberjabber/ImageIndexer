@@ -182,12 +182,12 @@ def launch_model():
             "--mmproj", config['mmproj'],
             "--contextsize", str(config['contextsize']),
             "--visionmaxres", str(config['visionmaxres']),
-            "--chatcompletionsadapter", config['chatcompletionsadapter']
+            "--chatcompletionsadapter", str(config['chatcompletionsadapter']),
+            "--noshift"
         ]
 
         if config.get('flashattention', False):
             cmd.append("--flashattention")
-
         print(f"{Colors.GREEN}Launching koboldcpp...{Colors.NC}")
 
         # Make executable on Unix

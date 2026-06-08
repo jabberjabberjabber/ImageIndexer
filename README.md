@@ -225,7 +225,9 @@ These options determine how the keywords are handled after the AI generates them
 **Words must be 2+ characters:** Require words to be at least 2 characters long unless they are *x* or *u*.
 
 **Only Latin characters:** Remove keywords with non-Latin characters.
-   
+
+**Edit Banned Words:** Opens a dialog to edit the list of words and phrases that are silently dropped from generated keywords. Each entry is matched against the whole keyword — banning `cat` will not affect `category`. The default list contains words and phrases that LLMs commonly echo back verbatim from the prompt instructions. Entries are arbitrary UTF-8 strings, one per line.
+
 ## More Information and Troubleshooting
 
 Consult [the wiki](https://github.com/jabberjabberjabber/ImageIndexer/wiki) for detailed information.
