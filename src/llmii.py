@@ -373,7 +373,7 @@ class Config:
         self.reprocess_orphans = True
         self.text_completion = False
         self.gen_count = 250
-        self.res_limit = 448
+        self.res_limit = 768
         self.detailed_caption = False
         self.short_caption = False
         self.skip_verify = False
@@ -396,11 +396,11 @@ class Config:
         self.tag_instruction = 'Return a JSON object with key Keywords with the value as array of Keywords and tags that describe the image as follows: {"Keywords": []}' 
         self.no_sidecar_extension = False
         # Sampler settings
-        self.temperature = 0.2
-        self.top_p = 1.0
-        self.rep_pen = 1.01
-        self.top_k = 100
-        self.min_p = 0.05
+        self.temperature = 0.7
+        self.top_p = 0.8
+        self.rep_pen = 1.00
+        self.top_k = 20
+        self.min_p = 0.0
         self.use_default_badwordsids = False
         self.use_json_grammar = False
         self.skip_folders = []
@@ -408,6 +408,7 @@ class Config:
         self.preserve_date = False
         self.fix_extension = False
         #self.write_unsafe = False
+        self.banned_words = []
 
         self.instruction = """Return a JSON object containing a Description for the image and a list of Keywords.
 
@@ -588,13 +589,13 @@ class LLMProcessor:
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": instruction},
                         {
                             "type": "image_url",
                             "image_url": {
                                 "url": f"data:image/jpeg;base64,{processed_image}"
                             }
-                        }
+                        },
+                        {"type": "text", "text": instruction}
                     ]
                 }
             ]
@@ -607,7 +608,8 @@ class LLMProcessor:
                 "top_k": self.top_k,
                 "min_p": self.min_p,
                 "rep_pen": self.rep_pen,
-                "use_default_badwordsids": ban_eos
+                "use_default_badwordsids": ban_eos,
+                "chat_template_kwargs": {"enable_thinking": False}
             }
 
             # Add JSON schema if grammar is enabled and task requires structured output
@@ -819,8 +821,7 @@ class FileProcessor:
         self.et = exiftool.ExifToolHelper(encoding='utf-8')
         print("ExifTool initialized successfully")
         
-        # Words in the prompt tend to get repeated back by certain models
-        self.banned_words = ["no", "unspecified", "unknown", "unidentified", "identify", "topiary", "themes concepts", "items animals", "animals objects", "structures landmarks", "Foreground and background", "notable colors", "textures styles", "actions activities", "physical appearance", "Gender", "Age range", "visibly apparent", "apparent ancestry", "Occupation/role", "Relationships between individuals", "Emotions expressions", "body language"]
+        self.banned_words = list(config.banned_words)
                 
         self.keyword_fields = [
             "Keywords",
@@ -1647,13 +1648,11 @@ class FileProcessor:
                 
             for keyword in existing_keywords:
                 normalized = normalize_keyword(keyword, self.banned_words, self.config)
-            
                 if normalized:
                     all_keywords.add(normalized)
-                           
+
         for keyword in new_keywords:
             normalized = normalize_keyword(keyword, self.banned_words, self.config)
-            
             if normalized:
                 all_keywords.add(normalized)
 

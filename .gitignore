@@ -8,3 +8,4 @@ koboldcpp.exe
 *.exe
 resources/kobold_args.json
 /.claude
+/tests

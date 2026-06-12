@@ -491,7 +491,7 @@ class SettingsDialog(QDialog):
 
         self.instruction_text = GuiConfig.DEFAULT_INSTRUCTION
         self.skip_folders_text = ""
-        self.banned_words_list = llmii.Config().banned_words
+        self.banned_words_list = []
 
         self.load_settings()
     
