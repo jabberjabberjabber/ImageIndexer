@@ -396,10 +396,10 @@ class Config:
         self.tag_instruction = 'Return a JSON object with key Keywords with the value as array of Keywords and tags that describe the image as follows: {"Keywords": []}' 
         self.no_sidecar_extension = False
         # Sampler settings
-        self.temperature = 0.7
+        self.temperature = 0.1
         self.top_p = 0.8
         self.rep_pen = 1.00
-        self.top_k = 20
+        self.top_k = 100
         self.min_p = 0.0
         self.use_default_badwordsids = False
         self.use_json_grammar = False
@@ -879,7 +879,44 @@ class FileProcessor:
         )
         
         self.indexer.start()
+        
+    def sidecar_path_for_image(self, image_path):
+        """Create the sidecar path."""
+        if self.config.no_sidecar_extension:
+            return os.path.splitext(image_path)[0] + ".xmp"
+        return image_path + ".xmp"
 
+    def find_existing_sidecar(self, image_path):
+        """Find if a sidecar exists."""
+        candidates = [image_path + ".xmp",
+                      os.path.splitext(image_path)[0] + ".xmp"]
+        if self.config.no_sidecar_extension:
+            candidates.reverse()
+        for c in candidates:
+            if os.path.exists(c):
+                return c
+        return None
+
+    def resolve_metadata_source(self, image_path):
+        """Determine here this image's metadata is read from and written to:
+
+           - An existing sidecar is authoritative for BOTH read and write,
+             regardless of use_sidecar. We never write the image behind a
+             sidecar's back.
+           - No sidecar + use_sidecar on: read the image (migrates embedded
+             tags for free), write a new sidecar.
+           - No sidecar + use_sidecar off: image is the only store.
+           - Validation always targets the image; a sidecar can't report
+             that the image is corrupt.
+
+           Returns (read_target, write_target, validate_target).
+        """
+        existing = self.find_existing_sidecar(image_path)
+        if existing:
+            return existing, existing, image_path
+        if self.config.use_sidecar:
+            return image_path, self.sidecar_path_for_image(image_path), image_path
+        return image_path, image_path, image_path
     def rename_to_invalid(self, file_path):
         """ Rename a file to filename_ext.invalid
             Returns True if successful, False otherwise
@@ -1038,21 +1075,11 @@ class FileProcessor:
                                 new_metadata = {}
 
                                 # Check if we actually have a sidecar in the path
-                                if self.config.use_sidecar and metadata["SourceFile"].lower().endswith(".xmp"):
-                                    source = metadata["SourceFile"]
-                                    if self.config.no_sidecar_extension:
-                                        # image.xmp -> need to find the actual image file
-                                        base = os.path.splitext(source)[0]
-                                        # find matching image file with any supported extension
-                                        for exts in self.image_extensions.values():
-                                            for ext in exts:
-                                                candidate = base + ext
-                                                if os.path.exists(candidate):
-                                                    metadata["SourceFile"] = candidate
-                                                    break
-                                    else:
-                                        # image.jpg.xmp -> image.jpg
-                                        metadata["SourceFile"] = os.path.splitext(source)[0]
+                                if metadata["SourceFile"].lower().endswith(".xmp"):
+                                    image = self._read_to_image.get(os.path.normpath(metadata["SourceFile"]))
+                                    if image:
+                                        metadata["SourceFile"] = image
+                                
 
                                 new_metadata["SourceFile"] = metadata.get("SourceFile")
 
@@ -1223,39 +1250,40 @@ class FileProcessor:
         return False
 
     def _get_metadata_batch(self, files):
-        """ Get metadata for a batch of files
-            using persistent ExifTool instance.
-        """
-        exiftool_fields = self.keyword_fields + self.caption_fields + self.identifier_fields + self.status_fields + self.filetype_fields + self.orientation_field
-        
+        fields = (self.keyword_fields + self.caption_fields + self.identifier_fields
+                  + self.status_fields + self.filetype_fields + self.orientation_field)
+
+        self._read_to_image = {}
+        self._write_target = {}
+        read_targets, need_val = [], []
+        for img in files:
+            read_t, write_t, val_t = self.resolve_metadata_source(img)
+            read_targets.append(read_t)
+            self._write_target[os.path.normpath(img)] = write_t
+            if os.path.normpath(read_t) != os.path.normpath(img):
+                self._read_to_image[os.path.normpath(read_t)] = img
+            if not self.config.skip_verify and os.path.normpath(val_t) != os.path.normpath(read_t):
+                need_val.append((read_t, val_t))
+
         try:
-            if self.config.skip_verify:
-                params = []
-            else:
-                params = ["-validate"]   
-            
-            # Use sidecars if they exist for metadata instead of images because
-            # that is where we will have put the UUID and Status info
-            if self.config.use_sidecar:
-                xmp_files = []
-                for file in files:
-                    
-                    # Check for files named file.ext.xmp for sidecar
-                    if os.path.exists(file + ".xmp"):
-                        if file + ".xmp" not in xmp_files:
-                            xmp_files.append(file + ".xmp")
-                    # Check for files named file.xmp
-                    elif os.path.exists(os.path.splitext(file)[0] + ".xmp"):
-                        if os.path.splitext(file)[0] + ".xmp" not in xmp_files:
-                            xmp_files.append(os.path.splitext(file)[0] + ".xmp")
-                    else:
-                        xmp_files.append(file)
-                files = xmp_files
-            return self.et.get_tags(files, tags=exiftool_fields, params=params)
-            
+            params = [] if self.config.skip_verify else ["-validate"]
+            metadata_list = self.et.get_tags(read_targets, tags=fields, params=params)
+
+            if need_val:
+                images = [img for _r, img in need_val]
+                vals = self.et.get_tags(images, tags=["ExifTool:Validate"], params=["-validate"])
+                val_by_img = {os.path.normpath(v["SourceFile"]): v.get("ExifTool:Validate", "0 0 0")
+                              for v in vals}
+                read_to_img = {os.path.normpath(r): img for r, img in need_val}
+                for m in metadata_list:
+                    img = read_to_img.get(os.path.normpath(m["SourceFile"]))
+                    if img is not None:
+                        m["ExifTool:Validate"] = val_by_img.get(os.path.normpath(img), "0 0 0")
+
+            return metadata_list
         except exiftool.exceptions.ExifToolExecuteError as e:
             print(f"ExifTool Execute Error: {str(e)}")
-            self.callback(f"ExifTool execute error - check if files are accessible")
+            self.callback("ExifTool execute error - check if files are accessible")
             return []
         except exiftool.exceptions.ExifToolVersionError as e:
             print(f"ExifTool Version Error: {str(e)}")
@@ -1575,64 +1603,39 @@ class FileProcessor:
             return metadata
             
     def write_metadata(self, file_path, metadata):
-        """Write metadata using persistent ExifTool instance"""
         if self.config.dry_run:
             print("Dry run. Not writing.")
-
             return True
 
-        # Keep track of original file path for error handling
-        original_file_path = file_path
+        image_path = file_path
+        write_target = self._write_target.get(os.path.normpath(image_path), image_path)
+        writing_sidecar = write_target.lower().endswith(".xmp")
 
         try:
-            # -m: ignore minor errors
             params = ["-m"]
-
-            # -P: preserve file modification date (can cause temp files)
             if self.config.preserve_date:
                 params.append("-P")
-
-            # Overwrite in place to avoid temp files when no_backup is set, or when using sidecar
-            if self.config.no_backup or self.config.use_sidecar:
+            if self.config.no_backup or writing_sidecar:
                 params.append("-overwrite_original")
 
-            if self.config.use_sidecar:
-                if self.config.no_sidecar_extension:
-                    file_path = os.path.splitext(file_path)[0] + ".xmp"
-                else:
-                    file_path = file_path + ".xmp"
-            #if self.config.write_unsafe:
-                #params.append("-unsafe")
-            # Use existing ExifTool instance
-            self.et.set_tags(file_path, tags=metadata, params=params)
-
+            self.et.set_tags(write_target, tags=metadata, params=params)
             return True
 
         except Exception as e:
-            error_type = type(e).__name__
-            print(f"Metadata Write Error: {os.path.basename(original_file_path)}")
-            print(f"  Error type: {error_type}")
-            print(f"  Details: {str(e)}")
+            print(f"Metadata Write Error: {os.path.basename(image_path)}")
+            print(f"  {type(e).__name__}: {str(e)}")
             self.callback(f"\nError writing metadata: {str(e)}")
+
             if self.config.rename_invalid:
-                # Rename the original image file, not the sidecar
-                print(f"  Renaming file to .invalid")
-                self.rename_to_invalid(original_file_path)
-                # Also clean up the sidecar if it exists
-                if self.config.use_sidecar:
-                    if self.config.no_sidecar_extension:
-                        sidecar_path = os.path.splitext(original_file_path)[0] + ".xmp"
-                    else:
-                        sidecar_path = original_file_path + ".xmp"
-                    if os.path.exists(sidecar_path):
-                        try:
-                            os.remove(sidecar_path)
-                            self.callback(f"Removed incomplete sidecar file")
-                        except:
-                            pass
-            #print(f"\nError: {str(e)}")
-            #self.callback(f"---")
-            return False 
+                self.rename_to_invalid(image_path)
+                # Only ever delete a sidecar — never the image.
+                if writing_sidecar and write_target != image_path and os.path.exists(write_target):
+                    try:
+                        os.remove(write_target)
+                        self.callback("Removed incomplete sidecar file")
+                    except OSError:
+                        pass
+            return False
     
     def process_keywords(self, metadata, new_keywords):
         """ Normalize extracted keywords and deduplicate them.
