@@ -94,7 +94,12 @@ def show_menu():
     clear_screen()
     print(f"{Colors.CYAN}================ Indexer Launcher ================{Colors.NC}")
     print()
-    print(f"{Colors.YELLOW}1:{Colors.NC} {Colors.GREEN}Install Requirements{Colors.NC}")
+    print(f"{Colors.BLUE}First time users:{Colors.NC}")
+    print()
+    print(f"{Colors.BLUE}Select option 1 then option 2{Colors.NC}")
+    print(f"{Colors.BLUE}Then come back to this window and select option 3{Colors.NC}")
+    print()
+    print(f"{Colors.YELLOW}1:{Colors.NC} {Colors.GREEN}Install or Update Requirements{Colors.NC}")
     print(f"{Colors.YELLOW}2:{Colors.NC} {Colors.GREEN}Launch Model (koboldcpp){Colors.NC}")
     print(f"{Colors.YELLOW}3:{Colors.NC} {Colors.GREEN}Launch Indexer GUI{Colors.NC}")
     print(f"{Colors.YELLOW}4:{Colors.NC} {Colors.GREEN}Select Model{Colors.NC}")
@@ -120,12 +125,6 @@ def run_setup():
         return
 
     clear_screen()
-    print()
-    print("******************************************************")
-    print("** AFTER SELECTING A MODEL AN EXIT CODE WILL APPEAR **")
-    print("**              THIS IS NOT AN ERROR                **")
-    print("**        CLOSE THIS WINDOW WHEN YOU ARE DONE       **")
-    print("******************************************************")
     print()
 
     # Run setup module directly
@@ -233,12 +232,6 @@ def launch_model():
 def select_model():
     """Run model selection."""
     print(f"{Colors.BLUE}Model selection starting...{Colors.NC}")
-    print()
-    print("******************************************************")
-    print("** AFTER SELECTING A MODEL AN EXIT CODE WILL APPEAR **")
-    print("**                                                  **")
-    print("**              THIS IS NOT AN ERROR                **")
-    print("******************************************************")
     print()
 
     # Run setup module directly (without --update flag)

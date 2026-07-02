@@ -4,7 +4,7 @@
         "config": "qwen3.5-2b-q6.kcpps",
         "language_url": "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q6_K.gguf",
         "mmproj_url": "https://huggingface.co/bartowski/Qwen_Qwen3.5-2B-GGUF/resolve/main/mmproj-Qwen_Qwen3.5-2B-f16.gguf",
-        "description": "Small Qwen 3.5 vision model",
+        "description": "Smallest Qwen 3.5 vision model. Only choose this if you have no discrete GPU and you don't like CapRL-3B",
         "size_mb": 2200,
         "adapter": "ChatML-NoThink",
         "flashattention": true
@@ -65,7 +65,7 @@
         "config": "internvl3.5-8b.kcpps",
         "language_url": "https://huggingface.co/bartowski/OpenGVLab_InternVL3_5-8B-GGUF/blob/main/OpenGVLab_InternVL3_5-8B-Q4_K_M.gguf",
         "mmproj_url": "https://huggingface.co/bartowski/OpenGVLab_InternVL3_5-8B-GGUF/blob/main/mmproj-OpenGVLab_InternVL3_5-8B-f16.gguf",
-        "description": "Based on Qwen3 / GPT-OSS.",
+        "description": "Vision model by InternVL",
         "size_mb": 6000,
         "adapter": "ChatML",
         "flashattention": true
@@ -75,7 +75,7 @@
         "config": "pixtral-captioner-12b-q4.kcpps",
         "language_url": "https://huggingface.co/Hyphonical/Pixtral-12B-Captioner-Relaxed-Q4_K_M-GGUF/blob/main/pixtral-12b-captioner-relaxed-q4_k_m.gguf",
         "mmproj_url": "https://huggingface.co/mradermacher/pixtral-12b-GGUF/blob/main/pixtral-12b.mmproj-f16.gguf",
-        "description": "Mistralai's Pixtral fine-tuned for captioning (uncensored).",
+        "description": "Mistralai's Pixtral fine-tuned for captioning. Might caption things other models will not. Slow",
         "size_mb": 9700,
         "adapter": "Mistral-NonTekken",
         "flashattention": false
@@ -85,7 +85,7 @@
         "config": "gemma-3-12b-q4.kcpps",
         "language_url": "https://huggingface.co/bartowski/google_gemma-3-12b-it-GGUF/blob/main/google_gemma-3-12b-it-Q4_K_S.gguf",
         "mmproj_url": "https://huggingface.co/bartowski/google_gemma-3-12b-it-GGUF/blob/main/mmproj-google_gemma-3-12b-it-f16.gguf",
-        "description": "Medium size release of Gemma-3.",
+        "description": "Medium size release of Gemma-3. Slow",
         "size_mb": 9800,
         "adapter": "Gemma",
         "flashattention": false

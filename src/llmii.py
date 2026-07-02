@@ -5,146 +5,112 @@ from .image_processor import ImageProcessor
 from .llmii_utils import first_json, de_pluralize, AND_EXCEPTIONS
     
 def split_on_internal_capital(word):
-    """ Split a word if it contains a capital letter after the 4th position.
-        Returns the original word if no split is needed, or the split 
-        version if a capital is found.
-        
-        Examples:
-            BlueSky -> Blue Sky
-            microService -> micro Service
+    """Split a word if it contains a capital letter after the 4th position.
+       BlueSky -> Blue Sky, microService -> micro Service
     """
     if len(word) <= 4:
         return word
-    
     for i in range(4, len(word)):
         if word[i].isupper():
             return word[:i] + " " + word[i:]
-            
     return word
 
+
 def normalize_keyword(keyword, banned_words, config=None):
-    """ Normalizes keywords according to specific rules:
-        - Splits unhyphenated compound words on internal capitals
-        - Max words determined by config (default 2) unless middle word is 'and'/'or' (then +1)
-        - If split_and_entries enabled, remove and/or unless in exceptions list
-        - Hyphens between alphanumeric chars count as two words
-        - Cannot start with 3+ digits if no_digits_start is enabled
-        - Each word must be 2+ chars if min_word_length enabled (unless it is x or u)
-        - Removes all non-alphanumeric except spaces and valid hyphens
-        - Checks against banned words if ban_prompt_words enabled
-        - Makes singular if depluralize_keywords enabled
-        - Returns lowercase result
-    """   
+    """Normalize a keyword per config rules.
+
+    Returns:
+        str  - normalized keyword
+        list - two keywords, when an 'and'/'or' entry is split
+        None - keyword rejected
+    """
     if config is None:
         class DefaultConfig:
-            def __init__(self):
-                self.normalize_keywords = True
-                self.depluralize_keywords = True
-                self.limit_word_count = True
-                self.max_words_per_keyword = 2
-                self.split_and_entries = True
-                self.ban_prompt_words = True
-                self.no_digits_start = True
-                self.min_word_length = True
-                self.latin_only = True
-        
+            normalize_keywords = True
+            depluralize_keywords = True
+            limit_word_count = True
+            max_words_per_keyword = 2
+            split_and_entries = True
+            ban_prompt_words = True
+            no_digits_start = True
+            min_word_length = True
+            latin_only = True
         config = DefaultConfig()
-    
+
     if not config.normalize_keywords:
         return keyword.strip()
-    
+
     if not isinstance(keyword, str):
         keyword = str(keyword)
-    
-    # Handle internal capitalization before lowercase conversion
-    words = keyword.strip().split()
+
+    # Handle internal capitalization before lowercasing
     split_words = []
-    
-    for word in words:
+    for word in keyword.strip().split():
         split_words.extend(split_on_internal_capital(word).split())
-    
-    keyword = " ".join(split_words)
-    
-    # Convert to lowercase after handling capitals
-    keyword = keyword.lower().strip()
-    
-    # Remove non-Latin characters if latin_only is enabled
+    keyword = " ".join(split_words).lower().strip()
+
     if config.latin_only:
         keyword = re.sub(r'[^\x00-\x7F]', '', keyword)
-    
-    # Remove all non-alphanumeric chars except spaces and hyphens
+
+    # Remove non-alphanumeric and fix multiple spaces and hyphens
     keyword = re.sub(r'[^\w\s-]', '', keyword)
-    
-    # Replace multiple spaces/hyphens with single space/hyphen
-    keyword = re.sub(r'\s+', ' ', keyword)
-    keyword = re.sub(r'-+', '-', keyword)
     keyword = re.sub(r'_', ' ', keyword)
-    
-    # Check for banned words if enabled
+    keyword = re.sub(r'\s+', ' ', keyword).strip()
+    keyword = re.sub(r'-+', '-', keyword)
+
+    if not keyword:
+        return None
+
+    # Check for words we have excluded
     if config.ban_prompt_words and keyword in banned_words:
         return None
-    
-    # For validation, we'll track both original tokens and split words
+
+    # We will account for hyphenated words by splitting them and recombining later
     tokens = keyword.split()
     words = []
-    
-    # Validate and collect words for length checking
-    for token in tokens:    
-        
-        # Handle hyphenated words
+    is_hyphenated = False
+
+    for token in tokens:
         if '-' in token:
-            
-            # Check if hyphen is between alphanumeric chars
-            if not re.match(r'^[\w]+-[\w]+$', token):
+            if not re.match(r'^\w+-\w+$', token):
                 return None
-           
-            # Add hyphenated parts to words list for validation
-            parts = token.split('-')
-            words.extend(parts)
-        
+            is_hyphenated = True
+            words.extend(token.split('-'))
         else:
             words.append(token)
-    
-    # Validate word count if limit_word_count is enabled
+
+    # Word-count limit
     if config.limit_word_count:
         max_words = config.max_words_per_keyword
-        if len(words) > max_words + 1:
+        middle_conjunction = (
+            len(words) == 3 and words[1] in ('and', 'or')
+        )
+        limit = max_words + 1 if middle_conjunction else max_words
+        if len(words) > limit:
             return None
-        
-    # Handle and/or splitting if enabled
-    if config.split_and_entries and len(words) == 3 and words[1] in ['and', 'or']:
-        if ' '.join(words) in AND_EXCEPTIONS:
-            pass
-        else:
-            # Remove and/or and make singular if depluralize_keywords is enabled
-            if config.depluralize_keywords:
-                tokens = [de_pluralize(words[0]), de_pluralize(words[2])]
-            else:
-                tokens = [words[0], words[2]]
-    
-    # Word validation
-    for word in words:
-        
-        # Check minimum length if enabled
-        if config.min_word_length:
-            if len(word) < 2 and word not in ['x', 'u']:
-                return None
-        
-    # Check if starts with 3+ digits if enabled
+
     if config.no_digits_start and words and re.match(r'^\d{3,}', words[0]):
         return None
-    
-    # Make words singular if depluralize_keywords is enabled
+
+    for word in words:
+        if config.min_word_length and len(word) < 2 and word not in ('x', 'u'):
+            return None
+
+    # Split "X and Y" / "X or Y" into two keywords
+    if (config.split_and_entries
+            and len(words) == 3
+            and words[1] in ('and', 'or')
+            and not is_hyphenated
+            and ' '.join(words) not in AND_EXCEPTIONS):
+        if config.depluralize_keywords:
+            return [de_pluralize(words[0]), de_pluralize(words[2])]
+        return [words[0], words[2]]
+
     if config.depluralize_keywords:
-        # Make solo words singular
-        if len(words) == 1:
-            tokens = [de_pluralize(words[0])]
-        # If two or more words make the last word singular
-        elif len(tokens) > 1:
-            tokens[-1] = de_pluralize(tokens[-1])
-    
-    # Return the original tokens (preserving hyphens)
+        tokens[-1] = de_pluralize(tokens[-1])
+
     return ' '.join(tokens)
+    
     
 def clean_string(data):
     """ Makes sure the string is clean for addition
@@ -478,8 +444,12 @@ Use ENGLISH only. Generate ONLY a JSON object with the keys Description and Keyw
         ]}
         
     @classmethod
+    
     def from_args(cls):
         parser = argparse.ArgumentParser(description="Image Indexer")
+        parser.add_argument("--no-sidecar-extension", action="store_true",
+            help="Does not add the image file extension to sidecar filenames")
+        parser.add_argument("--gen-count", type=int, default=150, help="Number of tokens to generate")
         parser.add_argument("directory", help="Directory containing the files")
         parser.add_argument(
             "--api-url", default="http://localhost:5001", help="URL for the LLM API"
@@ -513,9 +483,6 @@ Use ENGLISH only. Generate ONLY a JSON object with the keys Description and Keyw
         parser.add_argument(
             "--update-keywords", action="store_true", help="Update existing keyword metadata"
         )
-        parser.add_argument(
-            "--gen-count", default=150, help="Number of tokens to generate"
-        )
         parser.add_argument("--detailed-caption", action="store_true", help="Write a detailed caption along with keywords")
         parser.add_argument(
             "--skip-verify", action="store_true", help="Skip verifying file metadata validity before processing"
@@ -530,16 +497,15 @@ Use ENGLISH only. Generate ONLY a JSON object with the keys Description and Keyw
         parser.add_argument("--res-limit", type=int, default=448, help="Limit the resolution of the image")
         parser.add_argument("--rename-invalid", action="store_true", help="Use rename invalid files so they don't get reprocessed")
         parser.add_argument("--preserve-date", action="store_true", help="Keep the original modified date, but will use a temp file when writing")
-        parser.add_argument("--no-extension-sidecar", action="store_true", help="Does not add the image file extension to sidecard filenames")
         args = parser.parse_args()
-
+        
         config = cls()
-        
+        defaults = {a.dest: parser.get_default(a.dest) for a in parser._actions}
         for key, value in vars(args).items():
-            setattr(config, key, value)
-        
+            if value != defaults.get(key) or not hasattr(config, key):
+                setattr(config, key, value)
         return config
-
+        
 class LLMProcessor:
     def __init__(self, config):
         self.api_url = config.api_url
@@ -658,13 +624,8 @@ class LLMProcessor:
             }
             if self.api_password:
                 headers["Authorization"] = f"Bearer {self.api_password}"
-
-            response = self.requests.post(
-                endpoint,
-                json=payload,
-                headers=headers
-            )
-
+            response = self.requests.post(endpoint, json=payload, headers=headers, timeout=600)
+            
             response.raise_for_status()
             response_json = response.json()
 
@@ -714,25 +675,17 @@ class BackgroundIndexer(threading.Thread):
         if not self.skip_folders:
             return False
 
-        # Normalize the directory path
-        dir_normalized = os.path.normpath(directory)
+        dir_norm = os.path.normpath(directory)
+        parts = dir_norm.split(os.sep)
 
-        for skip_folder in self.skip_folders:
-            skip_normalized = os.path.normpath(skip_folder)
-
-            # Check if it's a full path match
-            if dir_normalized == skip_normalized:
+        for skip in self.skip_folders:
+            skip_norm = os.path.normpath(skip)
+            if dir_norm == skip_norm:
                 return True
-
-            # Check if it's a relative path from root_dir
-            relative_skip = os.path.normpath(os.path.join(self.root_dir, skip_folder))
-            if dir_normalized == relative_skip:
+            if dir_norm == os.path.normpath(os.path.join(self.root_dir, skip)):
                 return True
-
-            # Check if the directory contains the skip folder in its path
-            if skip_normalized in dir_normalized or os.path.basename(dir_normalized) == os.path.basename(skip_normalized):
+            if skip_norm in parts:
                 return True
-
         return False
             
     def run(self):
@@ -821,7 +774,7 @@ class FileProcessor:
         self.et = exiftool.ExifToolHelper(encoding='utf-8')
         print("ExifTool initialized successfully")
         
-        self.banned_words = list(config.banned_words)
+        self.banned_words = [w.lower() for w in config.banned_words]
                 
         self.keyword_fields = [
             "Keywords",
@@ -1237,7 +1190,7 @@ class FileProcessor:
             print(f"Error checking UUID: {str(e)}")
             
             return None
-                        
+            
     def check_pause_stop(self):
         if self.check_paused_or_stopped():
             
@@ -1419,6 +1372,7 @@ class FileProcessor:
                 updated_metadata = self.generate_metadata(metadata, processed_image)
                 status = updated_metadata.get("XMP:Status")
 
+            
             # If retry didn't work, mark failed
             if not status == "success":
                 print(f"AI Generation Failed: {os.path.basename(file_path)}")
@@ -1426,12 +1380,15 @@ class FileProcessor:
                 self.callback(f"Retry failed due to AI for {file_path}")
                 self.callback(f"---")
                 metadata["XMP:Status"] = "failed"
-                
+                                
                 if not self.config.dry_run:
                     success = False
-                    self.write_metadata(file_path, metadata)
-                
-                
+                    self.write_metadata(file_path, {
+                        "SourceFile": file_path,
+                        "XMP:Status": "failed",
+                        "XMP:Identifier": metadata.get("XMP:Identifier", str(uuid.uuid4())),
+                    })
+            
             # Fix file extension if enabled (before writing metadata)
             if self.config.fix_extension and success:
                 expected_ext = metadata.get("File:FileTypeExtension")
@@ -1512,72 +1469,62 @@ class FileProcessor:
     
     def generate_metadata(self, metadata, processed_image):
         """ Generate metadata without writing to file.
-            Returns (metadata_dict)
-            
             short_caption will get a short caption in a single generation
             
             detailed_caption will get get a detailed caption using two
             generations
-            
+           
             update_caption appends new caption to existing caption to the existing description.
             
+            Returns metadata_dict.
         """
         new_metadata = {}
         existing_caption = metadata.get("MWG:Description")
         caption = None
         keywords = None
-        detailed_caption = ""
-        old_keywords = metadata.get("MWG:Keywords", [])
         file_path = metadata["SourceFile"]
-        
-        try:
 
-            # Determine whether to generate caption, keywords, or both
+        try:
             if not self.config.no_caption and self.config.detailed_caption:
                 print(f"  Generating keywords and detailed caption...")
-                data = clean_tags(self.llm_processor.describe_content(task="keywords", processed_image=processed_image))
-                detailed_caption = clean_string(self.llm_processor.describe_content(task="caption", processed_image=processed_image))               
-                
+                data = clean_tags(self.llm_processor.describe_content(
+                    task="keywords", processed_image=processed_image))
+                detailed_caption = clean_string(self.llm_processor.describe_content(
+                    task="caption", processed_image=processed_image)) or ""
+
                 if existing_caption and self.config.update_caption:
                     caption = existing_caption + "<generated>" + detailed_caption + "</generated>"
-                
                 else:
                     caption = detailed_caption
-                
+
                 if isinstance(data, dict):
                     keywords = data.get("Keywords")
-                   
+
             else:
                 if self.config.no_caption or not self.config.short_caption:
                     print(f"  Generating keywords only...")
-                    data = clean_tags(self.llm_processor.describe_content(task="keywords", processed_image=processed_image))
+                    data = clean_tags(self.llm_processor.describe_content(
+                        task="keywords", processed_image=processed_image))
                 else:
                     print(f"  Generating caption and keywords...")
-                    data = clean_json(self.llm_processor.describe_content(task="caption_and_keywords", processed_image=processed_image))
-                         
+                    data = clean_json(self.llm_processor.describe_content(
+                        task="caption_and_keywords", processed_image=processed_image))
+
                 if isinstance(data, dict):
                     keywords = data.get("Keywords")
-                
-                    if not existing_caption and not self.config.no_caption:
-                        caption = data.get("Description")
-                    
-                    elif existing_caption and self.config.update_caption:
-                        caption = existing_caption + "<generated>" + data.get("Description") + "</generated>"
-                    
-                    elif data.get("Description") and not self.config.no_caption:
-                        caption = data.get("Description")
-                    
+                    description = data.get("Description") or ""
+
+                    if existing_caption and self.config.update_caption:
+                        caption = existing_caption + "<generated>" + description + "</generated>"
+                    elif description and not self.config.no_caption:
+                        caption = description
                     else:
-                        if existing_caption:
-                            caption = existing_caption
-                        else:
-                            caption = ""
-                        
+                        caption = existing_caption or ""
+
             if not keywords:
                 print(f"No Keywords Generated: {os.path.basename(file_path)}")
                 print(f"  AI response did not contain valid keywords")
                 status = "retry"
-
             else:
                 status = "success"
                 keywords = self.process_keywords(metadata, keywords)
@@ -1589,19 +1536,46 @@ class FileProcessor:
             new_metadata["XMP:Status"] = status
             new_metadata["XMP:Identifier"] = metadata.get("XMP:Identifier", str(uuid.uuid4()))
             new_metadata["SourceFile"] = file_path
-            
+
             return new_metadata
-            
+
         except Exception as e:
             print(f"Metadata Generation Error: {os.path.basename(file_path)}")
             print(f"  Error type: {type(e).__name__}")
             print(f"  Details: {str(e)}")
             self.callback(f"Parse error for {file_path}: {str(e)}")
             self.callback(f"---")
-            metadata["XMP:Status"] = "retry"
+            return {
+                "MWG:Description": existing_caption,
+                "MWG:Keywords": metadata.get("MWG:Keywords", []),
+                "XMP:Status": "retry",
+                "XMP:Identifier": metadata.get("XMP:Identifier", str(uuid.uuid4())),
+                "SourceFile": file_path,
+            }
 
-            return metadata
-            
+    def process_keywords(self, metadata, new_keywords):
+        """ Normalize keywords, dedupe, and merge old ones if configured. """
+        all_keywords = set()
+
+        def add(keyword):
+            normalized = normalize_keyword(keyword, self.banned_words, self.config)
+            if isinstance(normalized, list):     
+                all_keywords.update(normalized)  
+            elif normalized:
+                all_keywords.add(normalized)
+
+        if self.config.update_keywords:
+            existing = metadata.get("MWG:Keywords", [])
+            if isinstance(existing, str):
+                existing = [k.strip() for k in existing.split(",")]
+            for kw in existing:
+                add(kw)
+
+        for kw in new_keywords:
+            add(kw)
+
+        return list(all_keywords) if all_keywords else None
+                    
     def write_metadata(self, file_path, metadata):
         if self.config.dry_run:
             print("Dry run. Not writing.")
@@ -1636,34 +1610,7 @@ class FileProcessor:
                     except OSError:
                         pass
             return False
-    
-    def process_keywords(self, metadata, new_keywords):
-        """ Normalize extracted keywords and deduplicate them.
-            If update is configured, combine the old and new keywords.
-        """
-        all_keywords = set()
-              
-        if self.config.update_keywords:
-            existing_keywords = metadata.get("MWG:Keywords", [])
-
-            if isinstance(existing_keywords, str):
-                existing_keywords = [k.strip() for k in existing_keywords.split(",")]
-                
-            for keyword in existing_keywords:
-                normalized = normalize_keyword(keyword, self.banned_words, self.config)
-                if normalized:
-                    all_keywords.add(normalized)
-
-        for keyword in new_keywords:
-            normalized = normalize_keyword(keyword, self.banned_words, self.config)
-            if normalized:
-                all_keywords.add(normalized)
-
-        if all_keywords:        
-            return list(all_keywords)
-        else:
-            return None
-        
+           
 def main(config=None, callback=None, check_paused_or_stopped=None):
     if config is None:
         config = Config.from_args()
