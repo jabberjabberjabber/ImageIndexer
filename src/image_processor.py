@@ -109,8 +109,8 @@ class ImageProcessor:
                 thumb = raw.extract_thumb()
                 if thumb.format == rawpy.ThumbFormat.JPEG:
                     thumb_img = Image.open(io.BytesIO(thumb.data))
-                    resized = self._resize_image(thumb_img)
-                    rotated = self._apply_orientation(resized, orientation)
+                    #resized = self._resize_image(thumb_img)
+                    rotated = self._apply_orientation(thumb_img, orientation)
                     buffer = io.BytesIO()
                     rotated.save(buffer, format="JPEG", quality=95)
                     return base64.b64encode(buffer.getvalue()).decode()
@@ -120,9 +120,9 @@ class ImageProcessor:
             # Orientation not needed
             rgb = raw.postprocess()
             img = Image.fromarray(rgb)
-            resized = self._resize_image(img)
+            #resized = self._resize_image(img)
             buffer = io.BytesIO()
-            resized.save(buffer, format="JPEG", quality=95)
+            img.save(buffer, format="JPEG", quality=95)
             return base64.b64encode(buffer.getvalue()).decode()
             
     def route_image(self, file_path, orientation=1):
@@ -148,8 +148,8 @@ class ImageProcessor:
                 if img.width <= 0 or img.height <= 0:
                     raise ValueError("Invalid image dimensions")
 
-                resized = self._resize_image(img)
-                rotated = self._apply_orientation(resized, orientation)
+                #resized = self._resize_image(img)
+                rotated = self._apply_orientation(img, orientation)
 
                 with io.BytesIO() as buffer:
                     rotated.save(buffer, format="JPEG", quality=95)
