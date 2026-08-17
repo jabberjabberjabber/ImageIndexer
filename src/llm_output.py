@@ -23,7 +23,9 @@ _KEYWORDS_ARRAY = re.compile(r'"Keywords"\s*:\s*\[(.*?)\]', re.DOTALL)
 
 
 def clean_string(data):
-    """Make a string safe for addition to metadata."""
+    """Make a string safe for addition to metadata.
+    """
+    
     if isinstance(data, dict):
         data = json.dumps(data)
 
@@ -48,20 +50,26 @@ def clean_string(data):
 
 
 def markdown_list_to_dict(text):
-    """Convert a markdown list found in text to {"Keywords": [...]}, else None."""
+    """Convert a markdown list found in text to {"Keywords": [...]}, else None.
+    """
+    
     items = _MD_LIST_ITEM.findall(text)
     return {"Keywords": items} if items else None
 
 
 def _unwrap(result):
-    """[{...}] -> {...}; everything else passes through."""
+    """[{...}] -> {...}; everything else passes through.
+    """
+    
     if isinstance(result, list) and result and isinstance(result[0], dict):
         return result[0]
     return result
 
 
 def _try_loads(text):
-    """json.loads that returns None instead of raising."""
+    """json.loads that returns None instead of raising.
+    """
+    
     try:
         return _unwrap(json.loads(text))
     except (ValueError, TypeError):
@@ -74,6 +82,7 @@ def clean_json(data):
     Handles direct dicts, list-wrapped dicts, markdown-fenced JSON, and
     malformed JSON via progressively more aggressive repair.
     """
+    
     if data is None:
         return None
 
@@ -86,7 +95,7 @@ def clean_json(data):
     if not isinstance(data, str):
         return None
 
-    # 1. Direct parse (fast path; always works with JSON grammar)
+    # 1. Direct parse
     result = _try_loads(data)
     if result is not None:
         return result
@@ -137,6 +146,7 @@ def clean_tags(data):
 
     Returns {"Keywords": [...]} or None.
     """
+    
     if data is None:
         return None
 

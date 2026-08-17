@@ -10,7 +10,6 @@ import os
 
 import exiftool
 
-# Fields read from every file
 KEYWORD_FIELDS = frozenset((
     "Keywords", "IPTC:Keywords", "Composite:keywords",
     "Subject", "DC:Subject", "XMP:Subject", "XMP-dc:Subject",
@@ -31,7 +30,6 @@ READ_FIELDS = (list(KEYWORD_FIELDS) + list(CAPTION_FIELDS)
 
 
 class MetadataStore:
-    """Owns the ExifTool subprocess and the read/write-target bookkeeping."""
 
     def __init__(self, config, callback=print):
         self.config = config
@@ -42,8 +40,6 @@ class MetadataStore:
         # Maps rebuilt per batch by get_batch()
         self._read_to_image = {}
         self._write_target = {}
-
-    # ---------- sidecar resolution ----------
 
     def sidecar_path_for_image(self, image_path):
         if self.config.no_sidecar_extension:
@@ -86,8 +82,6 @@ class MetadataStore:
 
     def write_target_for(self, image_path):
         return self._write_target.get(os.path.normpath(image_path), image_path)
-
-    # ---------- batched reads ----------
 
     def get_batch(self, files):
         """Read metadata for a batch of images (or their sidecars).
@@ -141,8 +135,6 @@ class MetadataStore:
             print(f"ExifTool Error: {type(e).__name__} - {str(e)}")
         return []
 
-    # ---------- writes ----------
-
     def write(self, file_path, metadata, on_write_error=None):
         """Write tags to the resolved target for file_path.
 
@@ -176,9 +168,6 @@ class MetadataStore:
 
     def terminate(self):
         self.et.terminate()
-
-
-# ---------- file repair operations ----------
 
 def rename_to_invalid(file_path, callback=print):
     """Rename a file to filename_ext.invalid. Returns True on success."""

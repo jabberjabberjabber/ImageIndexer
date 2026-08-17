@@ -63,7 +63,8 @@ class BackgroundIndexer(threading.Thread):
         self.metadata_queue.put((directory, batch))
 
     def _index_directory(self, directory):
-        """Scan one directory, emitting file batches of chunk_size."""
+        """Scan one directory, emitting file batches of chunk_size.
+        """
         directory = os.path.normpath(directory)
         batch = []
         try:

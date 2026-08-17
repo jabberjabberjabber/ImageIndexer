@@ -1,6 +1,13 @@
 """Keyword normalization.
+
+Rules here are per-keyword except for limit_shared_leaders, which needs the
+whole response. Anything that needs the whole *collection* -- vocabulary
+culling, descriptor splitting, cross-model agreement -- belongs downstream in
+a postprocessor, not here; this pipeline sees one image at a time and flushes
+as it goes.
 """
 import re
+from collections import Counter
 
 from .llmii_utils import de_pluralize, AND_EXCEPTIONS
 
@@ -17,7 +24,9 @@ _CONJUNCTIONS = frozenset(("and", "or"))
 
 
 class _DefaultRules:
-    """Fallback rules when no config is supplied."""
+    """Fallback rules when no config is supplied.
+    """
+    
     normalize_keywords = True
     depluralize_keywords = False
     limit_word_count = True
@@ -27,15 +36,42 @@ class _DefaultRules:
     no_digits_start = True
     min_word_length = True
     latin_only = True
+    max_shared_leaders = 5
 
 
 _DEFAULT_RULES = _DefaultRules()
+
+
+def limit_shared_leaders(keywords, max_run):
+    """Trim prefix-locked runs, keeping the first `max_run` of each leader.
+
+    Keywords must already be in generation order -- the model emits its most
+    confident tags first, so the survivors of a trim are the salient ones.
+
+    Returns (kept, dropped).
+    """
+    if not max_run or not keywords:
+        return list(keywords), []
+
+    seen = Counter()
+    kept, dropped = [], []
+    for keyword in keywords:
+        words = keyword.split()
+        leader = words[0] if words else keyword
+        seen[leader] += 1
+        # A bare "red" is the word itself, not a run of phrases headed by it.
+        if len(words) > 1 and seen[leader] > max_run:
+            dropped.append(keyword)
+        else:
+            kept.append(keyword)
+    return kept, dropped
 
 
 def split_on_internal_capital(word):
     """Split a word on a capital letter after the 4th position.
     BlueSky -> Blue Sky, microService -> micro Service
     """
+    
     if len(word) <= 4:
         return word
     for i in range(4, len(word)):
@@ -52,6 +88,7 @@ def normalize_keyword(keyword, banned_words, config=None):
         list - two keywords, when an 'and'/'or' entry is split
         None - keyword rejected
     """
+    
     if config is None:
         config = _DEFAULT_RULES
 

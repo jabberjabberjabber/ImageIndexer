@@ -22,8 +22,9 @@ from . import llmii
 from . import help_text
 
 class GuiConfig:
-    """ Configuration class for GUI dimensions and properties
+    """ Configuration class for GUI dimensions and properties.
     """
+    
     WINDOW_WIDTH = 704
     WINDOW_HEIGHT = 720
     WINDOW_FIXED = False
@@ -177,7 +178,8 @@ class BannedWordsDialog(QDialog):
 
 
 class SettingsHelpDialog(QDialog):
-    """ Dialog that shows help information for all settings """
+    """ Dialog that shows help information for all settings.
+    """
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -292,9 +294,9 @@ class SettingsDialog(QDialog):
         res_limit_layout = QHBoxLayout()
         self.res_limit = QSpinBox()
         self.res_limit.setMinimum(112)
-        self.res_limit.setMaximum(896)
-        self.res_limit.setValue(448)
-        self.res_limit.setSingleStep(14)
+        self.res_limit.setMaximum(2048)
+        self.res_limit.setValue(768)
+        self.res_limit.setSingleStep(8)
         res_limit_layout.addWidget(QLabel("Dimension length: "))
         res_limit_layout.addWidget(self.res_limit)
         scroll_layout.addLayout(res_limit_layout)
@@ -308,8 +310,8 @@ class SettingsDialog(QDialog):
         self.temperature_spinbox = QDoubleSpinBox()
         self.temperature_spinbox.setMinimum(0.0)
         self.temperature_spinbox.setMaximum(2.0)
-        self.temperature_spinbox.setValue(0.2)
-        self.temperature_spinbox.setSingleStep(0.05)
+        self.temperature_spinbox.setValue(0.6)
+        self.temperature_spinbox.setSingleStep(0.1)
         self.temperature_spinbox.setDecimals(2)
         temp_layout.addWidget(QLabel("Temperature:"))
         temp_layout.addWidget(self.temperature_spinbox)
@@ -380,6 +382,36 @@ class SettingsDialog(QDialog):
         json_grammar_group.setLayout(json_grammar_layout)
         scroll_layout.addWidget(json_grammar_group)
 
+        # Response Prefill Group
+        prefill_group = QGroupBox("Response Prefill")
+        prefill_layout = QVBoxLayout()
+
+        self.use_prefill_checkbox = QCheckBox(
+            "Prefill the start of the response")
+        self.use_prefill_checkbox.setChecked(False)
+        prefill_layout.addWidget(self.use_prefill_checkbox)
+
+        caption_prefill_layout = QHBoxLayout()
+        caption_prefill_layout.addWidget(QLabel("Caption:"))
+        self.caption_prefill_input = QLineEdit("A ")
+        caption_prefill_layout.addWidget(self.caption_prefill_input)
+        prefill_layout.addLayout(caption_prefill_layout)
+
+        keywords_prefill_layout = QHBoxLayout()
+        keywords_prefill_layout.addWidget(QLabel("Keywords:"))
+        self.keywords_prefill_input = QLineEdit('{"Keywords": ["')
+        keywords_prefill_layout.addWidget(self.keywords_prefill_input)
+        prefill_layout.addLayout(keywords_prefill_layout)
+
+        caption_and_keywords_prefill_layout = QHBoxLayout()
+        caption_and_keywords_prefill_layout.addWidget(QLabel("Caption + Keywords:"))
+        self.caption_and_keywords_prefill_input = QLineEdit('{"Description": "A ')
+        caption_and_keywords_prefill_layout.addWidget(self.caption_and_keywords_prefill_input)
+        prefill_layout.addLayout(caption_and_keywords_prefill_layout)
+
+        prefill_group.setLayout(prefill_layout)
+        scroll_layout.addWidget(prefill_group)
+
         options_group = QGroupBox("File Options")
         options_layout = QVBoxLayout()
         
@@ -397,7 +429,6 @@ class SettingsDialog(QDialog):
         self.preserve_date_checkbox = QCheckBox("Preserve file modification date (may create temp files)")
         self.fix_extension_checkbox = QCheckBox("Fix file extension if it doesn't match file type")
         
-        #self.write_unsafe_checkbox = QCheckBox("Use unsafe flag when writing metadata")
         options_layout.addWidget(self.no_crawl_checkbox)
         options_layout.addWidget(self.reprocess_all_checkbox)
         options_layout.addWidget(self.reprocess_failed_checkbox)
@@ -411,8 +442,6 @@ class SettingsDialog(QDialog):
         options_layout.addWidget(self.rename_invalid_checkbox)
         options_layout.addWidget(self.preserve_date_checkbox)
         options_layout.addWidget(self.fix_extension_checkbox)
-        
-        #options_layout.addWidget(self.write_unsafe_checkbox)
         
         options_group.setLayout(options_layout)
         scroll_layout.addWidget(options_group)
@@ -447,6 +476,19 @@ class SettingsDialog(QDialog):
         self.word_limit_layout.addWidget(QLabel("words in keyword entry"))
         self.word_limit_layout.addStretch(1)
         self.word_limit_checkbox.setChecked(True)
+        self.shared_leaders_layout = QHBoxLayout()
+        self.shared_leaders_checkbox = QCheckBox("Allow at most")
+        self.shared_leaders_spinbox = QSpinBox()
+        self.shared_leaders_spinbox.setMinimum(1)
+        self.shared_leaders_spinbox.setMaximum(50)
+        self.shared_leaders_spinbox.setValue(5)
+        self.shared_leaders_layout.addWidget(self.shared_leaders_checkbox)
+        self.shared_leaders_layout.addWidget(self.shared_leaders_spinbox)
+        self.shared_leaders_layout.addWidget(
+            QLabel("keywords starting with the same word")
+        )
+        self.shared_leaders_layout.addStretch(1)
+        self.shared_leaders_checkbox.setChecked(True)
         self.split_and_checkbox = QCheckBox("Split 'and'/'or' entries")
         self.split_and_checkbox.setChecked(True)
         self.ban_prompt_words_checkbox = QCheckBox("Ban prompt word repetitions")
@@ -463,6 +505,7 @@ class SettingsDialog(QDialog):
 
         corrections_layout.addWidget(self.depluralize_checkbox)
         corrections_layout.addLayout(self.word_limit_layout)
+        corrections_layout.addLayout(self.shared_leaders_layout)
         corrections_layout.addWidget(self.split_and_checkbox)
         corrections_layout.addWidget(self.ban_prompt_words_checkbox)
         corrections_layout.addWidget(self.no_digits_start_checkbox)
@@ -472,7 +515,25 @@ class SettingsDialog(QDialog):
         
         keyword_corrections_group.setLayout(corrections_layout)
         scroll_layout.addWidget(keyword_corrections_group)
-        
+
+        json_output_group = QGroupBox("JSON Output")
+        json_output_layout = QVBoxLayout()
+
+        self.json_output_checkbox = QCheckBox(
+            "Write tags to JSON file"
+        )
+        self.json_output_checkbox.setChecked(False)
+        json_output_layout.addWidget(self.json_output_checkbox)
+
+        json_file_layout = QHBoxLayout()
+        json_file_layout.addWidget(QLabel("JSON output file:"))
+        self.json_output_file_input = QLineEdit("image_tags.json")
+        json_file_layout.addWidget(self.json_output_file_input)
+        json_output_layout.addLayout(json_file_layout)
+
+        json_output_group.setLayout(json_output_layout)
+        scroll_layout.addWidget(json_output_group)
+
         scroll_area.setWidget(scroll_content)
         layout.addWidget(scroll_area, 1)
         
@@ -496,7 +557,9 @@ class SettingsDialog(QDialog):
         self.load_settings()
     
     def show_help(self):
-        """Show the settings help dialog"""
+        """Show the settings help dialog.
+        """
+        
         dialog = SettingsHelpDialog(self)
         dialog.exec()
         
@@ -525,7 +588,7 @@ class SettingsDialog(QDialog):
                 self.api_password_input.setText(settings.get('api_password', ''))
                 self.system_instruction_input.setText(settings.get('system_instruction', 'You are a helpful assistant.'))
                 self.gen_count.setValue(settings.get('gen_count', 250))
-                self.res_limit.setValue(settings.get('res_limit', 448))
+                self.res_limit.setValue(settings.get('res_limit', 768))
                 self.instruction_text = settings.get('instruction', GuiConfig.DEFAULT_INSTRUCTION)
                 self.skip_folders_text = settings.get('skip_folders', '')
                 banned = settings.get('banned_words', None)
@@ -545,7 +608,6 @@ class SettingsDialog(QDialog):
                 self.rename_invalid_checkbox.setChecked(settings.get('rename_invalid', False))
                 self.preserve_date_checkbox.setChecked(settings.get('preserve_date', False))
                 self.fix_extension_checkbox.setChecked(settings.get('fix_extension', False))
-                #self.write_unsafe_checkbox.setChecked(settings.get('write_unsafe', False))
                 self.caption_instruction_input.setText(settings.get('caption_instruction', 'Describe the image in detail. Be specific.'))
                 self.tag_instruction_input.setText(settings.get('tag_instruction', 'Return a JSON object with key Keywords with the value as array of Keywords and tags that describe the image as follows: {"Keywords": []}'))
                 
@@ -555,7 +617,6 @@ class SettingsDialog(QDialog):
                 elif settings.get('no_caption', False):
                     self.no_caption_radio.setChecked(True)
                 else:
-                    # Default to short caption
                     self.short_caption_radio.setChecked(True)
                     
                 self.update_keywords_checkbox.setChecked(settings.get('update_keywords', True))
@@ -565,6 +626,10 @@ class SettingsDialog(QDialog):
                 self.depluralize_checkbox.setChecked(settings.get('depluralize_keywords', False))
                 self.word_limit_checkbox.setChecked(settings.get('limit_word_count', True))
                 self.word_limit_spinbox.setValue(settings.get('max_words_per_keyword', 2))
+                max_shared = settings.get('max_shared_leaders', 5)
+                self.shared_leaders_checkbox.setChecked(bool(max_shared))
+                if max_shared:
+                    self.shared_leaders_spinbox.setValue(max_shared)
                 self.split_and_checkbox.setChecked(settings.get('split_and_entries', True))
                 self.ban_prompt_words_checkbox.setChecked(settings.get('ban_prompt_words', True))
                 self.no_digits_start_checkbox.setChecked(settings.get('no_digits_start', True))
@@ -572,14 +637,25 @@ class SettingsDialog(QDialog):
                 self.latin_only_checkbox.setChecked(settings.get('latin_only', True))
 
                 # Load sampler settings
-                self.temperature_spinbox.setValue(settings.get('temperature', 0.2))
+                self.temperature_spinbox.setValue(settings.get('temperature', 0.6))
                 self.top_p_spinbox.setValue(settings.get('top_p', 1.0))
-                self.top_k_spinbox.setValue(settings.get('top_k', 100))
-                self.min_p_spinbox.setValue(settings.get('min_p', 0.05))
+                self.top_k_spinbox.setValue(settings.get('top_k', 120))
+                self.min_p_spinbox.setValue(settings.get('min_p', 0.10))
                 self.rep_pen_spinbox.setValue(settings.get('rep_pen', 1.01))
 
                 # Load JSON grammar setting
                 self.use_json_grammar_checkbox.setChecked(settings.get('use_json_grammar', False))
+
+                # Load response prefill settings
+                self.use_prefill_checkbox.setChecked(settings.get('use_prefill', False))
+                self.caption_prefill_input.setText(settings.get('caption_prefill', 'A '))
+                self.keywords_prefill_input.setText(settings.get('keywords_prefill', '{"Keywords": ["'))
+                self.caption_and_keywords_prefill_input.setText(
+                    settings.get('caption_and_keywords_prefill', '{"Description": "A '))
+
+                # Load JSON output settings
+                self.json_output_checkbox.setChecked(settings.get('json_output', False))
+                self.json_output_file_input.setText(settings.get('json_output_file', 'image_tags.json'))
 
         except Exception as e:
             print(f"Error loading settings: {e}")
@@ -618,6 +694,8 @@ class SettingsDialog(QDialog):
             'depluralize_keywords': self.depluralize_checkbox.isChecked(),
             'limit_word_count': self.word_limit_checkbox.isChecked(),
             'max_words_per_keyword': self.word_limit_spinbox.value(),
+            'max_shared_leaders': (self.shared_leaders_spinbox.value()
+                                   if self.shared_leaders_checkbox.isChecked() else 0),
             'split_and_entries': self.split_and_checkbox.isChecked(),
             'ban_prompt_words': self.ban_prompt_words_checkbox.isChecked(),
             'no_digits_start': self.no_digits_start_checkbox.isChecked(),
@@ -629,6 +707,12 @@ class SettingsDialog(QDialog):
             'min_p': self.min_p_spinbox.value(),
             'rep_pen': self.rep_pen_spinbox.value(),
             'use_json_grammar': self.use_json_grammar_checkbox.isChecked(),
+            'use_prefill': self.use_prefill_checkbox.isChecked(),
+            'caption_prefill': self.caption_prefill_input.text(),
+            'keywords_prefill': self.keywords_prefill_input.text(),
+            'caption_and_keywords_prefill': self.caption_and_keywords_prefill_input.text(),
+            'json_output': self.json_output_checkbox.isChecked(),
+            'json_output_file': self.json_output_file_input.text(),
         }
 
         try:
@@ -679,7 +763,6 @@ class IndexerThread(QThread):
         """Callback for llmii's process_file function"""
         # Check if message is a dictionary with image data
         if isinstance(message, dict) and 'type' in message and message['type'] == 'image_data':
-            # Extract the image data and emit signal
             base64_image = message.get('base64_image', '')
             caption = message.get('caption', '')
             keywords = message.get('keywords', [])
@@ -691,7 +774,6 @@ class IndexerThread(QThread):
 
     def run(self):
         try:
-            # Pass our callback function to llmii
             llmii.main(self.config, self.process_callback, self.check_paused_or_stopped)
         except Exception as e:
             self.output_received.emit(f"Error: {str(e)}")
@@ -721,18 +803,15 @@ class KeywordWidget(QWidget):
         self.keywords_layout.setSpacing(0)
         self.keywords_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         
-        # Set fixed size policy for container
         self.keywords_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-        
-        # Add header and container to layout
-        #self.layout.addWidget(QLabel("Keywords:"))
         self.layout.addWidget(self.keywords_container)
         
         # Ensure widget doesn't expand beyond its allocated space
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
     
     def clear(self):
-        # Clear keywords layout
+        # Clear keywords
+        
         for i in reversed(range(self.keywords_layout.count())): 
             widget = self.keywords_layout.itemAt(i).widget()
             if widget:
@@ -760,7 +839,6 @@ class KeywordWidget(QWidget):
         for i, keyword in enumerate(keywords):
             # Check if we need to start a new row
             if i > 0 and i % max_per_row == 0:
-                # Create a new row
                 row_widget = QWidget()
                 row_layout = QHBoxLayout(row_widget)
                 row_layout.setContentsMargins(0, 0, 0, 0)
@@ -796,9 +874,9 @@ class ImageIndexerGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         
-        # Apply fixed window size
         self.setWindowTitle("Image Indexer GUI")
         self.setFixedSize(GuiConfig.WINDOW_WIDTH, GuiConfig.WINDOW_HEIGHT)
+        
         # Disable maximize button and resizing
         if GuiConfig.WINDOW_FIXED:
             self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowMaximizeButtonHint)
@@ -811,13 +889,11 @@ class ImageIndexerGUI(QMainWindow):
         main_layout.setSpacing(2)
         main_layout.setContentsMargins(GuiConfig.CONTENT_MARGINS, GuiConfig.CONTENT_MARGINS, GuiConfig.CONTENT_MARGINS, GuiConfig.CONTENT_MARGINS)
         
-        # Upper section with controls - fixed height
         controls_widget = QWidget()
         controls_layout = QVBoxLayout(controls_widget)
         controls_layout.setContentsMargins(0, 0, 0, 0)
         controls_layout.setSpacing(GuiConfig.SPACING)
         
-        # Directory and Settings section
         dir_layout = QHBoxLayout()
         self.dir_input = QLineEdit()
         dir_button = QPushButton("Select Directory")
@@ -1226,6 +1302,10 @@ class ImageIndexerGUI(QMainWindow):
         config.depluralize_keywords = self.settings_dialog.depluralize_checkbox.isChecked()
         config.limit_word_count = self.settings_dialog.word_limit_checkbox.isChecked()
         config.max_words_per_keyword = self.settings_dialog.word_limit_spinbox.value()
+        config.max_shared_leaders = (
+            self.settings_dialog.shared_leaders_spinbox.value()
+            if self.settings_dialog.shared_leaders_checkbox.isChecked() else 0
+        )
         config.split_and_entries = self.settings_dialog.split_and_checkbox.isChecked()
         config.ban_prompt_words = self.settings_dialog.ban_prompt_words_checkbox.isChecked()
         config.no_digits_start = self.settings_dialog.no_digits_start_checkbox.isChecked()
@@ -1257,6 +1337,17 @@ class ImageIndexerGUI(QMainWindow):
 
         # Load JSON grammar setting
         config.use_json_grammar = self.settings_dialog.use_json_grammar_checkbox.isChecked()
+
+        # Load response prefill settings
+        config.use_prefill = self.settings_dialog.use_prefill_checkbox.isChecked()
+        config.caption_prefill = self.settings_dialog.caption_prefill_input.text()
+        config.keywords_prefill = self.settings_dialog.keywords_prefill_input.text()
+        config.caption_and_keywords_prefill = (
+            self.settings_dialog.caption_and_keywords_prefill_input.text())
+
+        # Load JSON output settings
+        config.json_output = self.settings_dialog.json_output_checkbox.isChecked()
+        config.json_output_file = self.settings_dialog.json_output_file_input.text() or "image_tags.json"
 
         # Parse skip folders from text (semicolon or newline separated)
         skip_folders_text = self.settings_dialog.skip_folders_text

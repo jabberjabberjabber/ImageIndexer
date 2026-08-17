@@ -3,7 +3,6 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REQUIREMENTS_FILE="$SCRIPT_DIR/../requirements.txt"
 VENV_NAME="llmii_env"
 
-# Function to check if a command exists
 command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
@@ -13,11 +12,9 @@ if ! command_exists python3; then
     exit 1
 fi
 
-# Check if exiftool is installed
 if ! command_exists exiftool; then
     echo "exiftool is not found. Attempting to install..."
     
-    # Try to install based on the OS
     if [[ "$(uname)" == "Darwin" ]]; then
         if command_exists brew; then
             echo "Installing exiftool using Homebrew..."

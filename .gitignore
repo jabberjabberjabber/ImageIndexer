@@ -2,10 +2,12 @@
 /src/__pycache__
 *.gguf
 settings.json
-koboldcpp.exe
 *.txt
 /dev
 *.exe
 resources/kobold_args.json
 /.claude
 /tests
+image_tags.json
+*.7z
+

@@ -73,6 +73,7 @@ class ImageProcessor:
     def _calculate_dimensions(self, width, height):
         """ Calculate dimensions maintaining aspect ratio and patch compatibility 
         """
+        
         scale = min(self.max_dimension / width, self.max_dimension / height, 1.0)
         
         scaled_width = width * scale
@@ -86,6 +87,7 @@ class ImageProcessor:
     def _resize_image(self, img):
         """ Resize image ensuring patch compatibility
         """
+        
         new_width, new_height = self._calculate_dimensions(*img.size)
         if new_width != img.width or new_height != img.height:
             return img.resize((new_width, new_height), Image.Resampling.BICUBIC)
@@ -93,6 +95,7 @@ class ImageProcessor:
         
     def _apply_orientation(self, img, orientation):
         """Apply EXIF orientation rotation."""
+        
         if orientation in [3,4]:
             return img.rotate(180, expand=True)
         elif orientation in [5,6,7]:
@@ -103,14 +106,15 @@ class ImageProcessor:
 
     def process_raw_image(self, file_path, orientation=1):
         """Process RAW image files"""
+        
         with rawpy.imread(file_path) as raw:
             try:
                 # Try to extract embedded JPEG thumbnail first
                 thumb = raw.extract_thumb()
                 if thumb.format == rawpy.ThumbFormat.JPEG:
                     thumb_img = Image.open(io.BytesIO(thumb.data))
-                    #resized = self._resize_image(thumb_img)
-                    rotated = self._apply_orientation(thumb_img, orientation)
+                    resized = self._resize_image(thumb_img)
+                    rotated = self._apply_orientation(resized, orientation)
                     buffer = io.BytesIO()
                     rotated.save(buffer, format="JPEG", quality=95)
                     return base64.b64encode(buffer.getvalue()).decode()
@@ -120,13 +124,14 @@ class ImageProcessor:
             # Orientation not needed
             rgb = raw.postprocess()
             img = Image.fromarray(rgb)
-            #resized = self._resize_image(img)
+            resized = self._resize_image(img)
             buffer = io.BytesIO()
-            img.save(buffer, format="JPEG", quality=95)
+            resized.save(buffer, format="JPEG", quality=95)
             return base64.b64encode(buffer.getvalue()).decode()
             
     def route_image(self, file_path, orientation=1):
         """Process image"""
+        
         if os.path.getsize(file_path) > self.max_file_size:
             raise ValueError(f"File exceeds size limit of {self.max_file_size} bytes")
 
@@ -148,8 +153,8 @@ class ImageProcessor:
                 if img.width <= 0 or img.height <= 0:
                     raise ValueError("Invalid image dimensions")
 
-                #resized = self._resize_image(img)
-                rotated = self._apply_orientation(img, orientation)
+                resized = self._resize_image(img)
+                rotated = self._apply_orientation(resized, orientation)
 
                 with io.BytesIO() as buffer:
                     rotated.save(buffer, format="JPEG", quality=95)
@@ -163,8 +168,8 @@ class ImageProcessor:
     def process_image(self, file_path, orientation):    
         """ Process an image through the LLM
         """
+        
         file_path = os.path.normpath(file_path)
-        #self.orientation = orientation
         encoded = self.route_image(file_path, orientation)
         
         if not encoded:

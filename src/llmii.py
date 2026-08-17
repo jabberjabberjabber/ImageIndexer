@@ -1,28 +1,16 @@
-"""Entry point and backward-compatible facade.
-
-The implementation now lives in focused modules:
-
-    config.py       - Config, prompts, supported extensions, CLI parsing
-    keywords.py     - keyword normalization (pure functions)
-    llm_output.py   - parsing/repair of raw LLM responses
-    llm_client.py   - HTTP client for the vision LLM (LLMProcessor)
-    indexer.py      - background directory crawler (BackgroundIndexer)
-    metadata_io.py  - ExifTool reads/writes, sidecars, file repair ops
-    pipeline.py     - FileProcessor orchestration with image prefetch
-
-Everything that was importable from this module before still is.
-"""
 from .config import Config
 from .keywords import normalize_keyword, split_on_internal_capital
 from .llm_output import clean_json, clean_string, clean_tags, markdown_list_to_dict
 from .llm_client import LLMProcessor
 from .indexer import BackgroundIndexer
 from .pipeline import FileProcessor
+from .json_pipeline import JsonFileProcessor
 
 __all__ = [
     "Config", "normalize_keyword", "split_on_internal_capital",
     "clean_json", "clean_string", "clean_tags", "markdown_list_to_dict",
-    "LLMProcessor", "BackgroundIndexer", "FileProcessor", "main",
+    "LLMProcessor", "BackgroundIndexer", "FileProcessor", "JsonFileProcessor",
+    "main",
 ]
 
 
@@ -33,7 +21,10 @@ def main(config=None, callback=None, check_paused_or_stopped=None):
     if not hasattr(config, "chunk_size"):
         config.chunk_size = 100
 
-    file_processor = FileProcessor(config, check_paused_or_stopped, callback)
+    if getattr(config, "json_output", False):
+        file_processor = JsonFileProcessor(config, check_paused_or_stopped, callback)
+    else:
+        file_processor = FileProcessor(config, check_paused_or_stopped, callback)
 
     try:
         file_processor.process_directory(config.directory)

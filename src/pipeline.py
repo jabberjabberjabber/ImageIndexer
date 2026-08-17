@@ -1,19 +1,3 @@
-"""Processing pipeline.
-
-Per exiftool batch the flow is:
-
-    standardize -> triage -> [preprocess image | LLM inference] -> write
-
-Standardize/triage are cheap and run up front on the whole batch. The
-expensive stages are then overlapped: while the LLM works on image N, a
-small executor pre-decodes/resizes/encodes image N+1 (config.prefetch
-workers, default 1). Image decoding is the main CPU/disk cost and the LLM
-round trip is pure network wait, so this hides one behind the other without
-changing processing order or exceeding one in-flight API request.
-
-All ExifTool access stays on this (main) thread -- only pure-Python image
-work is handed to the executor.
-"""
 import os
 import queue
 import time
@@ -23,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from .image_processor import ImageProcessor
 from .indexer import BackgroundIndexer
-from .keywords import normalize_keyword
+from .keywords import limit_shared_leaders, normalize_keyword
 from .llm_client import LLMProcessor
 from .llm_output import clean_json, clean_string, clean_tags
 from . import metadata_io
@@ -46,8 +30,6 @@ class FileProcessor:
 
         self.banned_words = frozenset(w.lower() for w in config.banned_words)
 
-        # Flat extension -> type map; built once instead of scanning the
-        # nested dict (and lowercasing every extension) per file.
         self._ext_to_type = {
             ext.lower(): ftype
             for ftype, exts in config.image_extensions.items()
@@ -69,10 +51,6 @@ class FileProcessor:
             skip_folders=getattr(config, "skip_folders", []),
         )
         self.indexer.start()
-
-    # ------------------------------------------------------------------
-    # main loop
-    # ------------------------------------------------------------------
 
     def process_directory(self, directory):
         prefetch = max(0, getattr(self.config, "prefetch", 1))
@@ -97,16 +75,16 @@ class FileProcessor:
                         print(f"Reading metadata for {len(batch)} file(s)...")
                     metadata_list = self.store.get_batch(batch)
 
-                    # Cheap stages first, for the whole sub-batch
                     work = []
                     for raw in metadata_list:
                         if not raw:
                             continue
                         metadata = self._standardize(raw)
-                        self.files_processed += 1
                         metadata = self._triage(metadata)
                         if metadata:
                             work.append(metadata)
+                        else:
+                            self.files_processed += 1
                         if self.check_pause_stop():
                             return
 
@@ -126,13 +104,15 @@ class FileProcessor:
     def _run_pipeline(self, work, executor):
         """Run preprocess+inference over triaged items, prefetching the next
         image while the LLM handles the current one. Returns True if a
-        pause/stop request should abort processing."""
+        pause/stop request should abort processing.
+        """
+        
         if not work:
             return False
 
         if executor is None:
             for metadata in work:
-                self._process_one(metadata, *self._preprocess(metadata))
+                self._process_counted(metadata, *self._preprocess(metadata))
                 if self.check_pause_stop():
                     return True
             return False
@@ -155,19 +135,27 @@ class FileProcessor:
             metadata, future = pending.popleft()
             processed_image, error = future.result()
             submit_next()
-            self._process_one(metadata, processed_image, error)
+            self._process_counted(metadata, processed_image, error)
             if self.check_pause_stop():
                 for _m, f in pending:
                     f.cancel()
                 return True
         return False
 
-    # ------------------------------------------------------------------
-    # stage 1: standardize raw exiftool output
-    # ------------------------------------------------------------------
+    def _process_counted(self, metadata, processed_image, error):
+        """_process_one, with the queue counter advanced for this one file.
+
+        Counted before the call, not after, so the "Processed" line a file
+        prints when it finishes includes itself. Both pipelines route through
+        here; _process_one is overridden, this is not.
+        """
+        self.files_processed += 1
+        self._process_one(metadata, processed_image, error)
 
     def _standardize(self, metadata):
-        """Collapse the many possible tag names into MWG/XMP fields."""
+        """Collapse the many possible tag names into MWG/XMP fields.
+        """
+        
         # If the read target was a sidecar, point SourceFile back at the image
         source = metadata["SourceFile"]
         if source.lower().endswith(".xmp"):
@@ -221,13 +209,11 @@ class FileProcessor:
 
         return new_metadata
 
-    # ------------------------------------------------------------------
-    # stage 2: triage (existence, validity, UUID/status) -- main thread
-    # ------------------------------------------------------------------
-
     def _triage(self, metadata):
         """Decide whether this file needs LLM processing. Returns metadata
-        ready for processing, or None to skip."""
+        ready for processing, or None to skip.
+        """
+        
         try:
             file_path = metadata["SourceFile"]
 
@@ -242,8 +228,6 @@ class FileProcessor:
                 self.callback("---")
                 return None
 
-            # Validate only files without a status (or on reprocess_all);
-            # already-statused files were validated on a previous run.
             should_validate = ((not current_status or self.config.reprocess_all)
                                and not self.config.skip_verify)
             if should_validate and not self._validate(metadata, file_path):
@@ -265,7 +249,9 @@ class FileProcessor:
             return None
 
     def _validate(self, metadata, file_path):
-        """Returns False if the file is invalid or unwritable."""
+        """Returns False if the file is invalid or unwritable.
+        """
+        
         validation_parts = metadata.get("ExifTool:Validate", "0 0 0").split()
         if len(validation_parts) >= 3:
             errors, warnings, minor = map(int, validation_parts[:3])
@@ -283,8 +269,7 @@ class FileProcessor:
             self.callback("---")
             return False
 
-        # Warnings: test writability so we don't waste LLM time on a file
-        # we can't write back to.
+        # Test writability
         if warnings > 0 and minor >= warnings:
             print(f"File has validation warnings: {os.path.basename(file_path)}")
             print(f"  Warnings: {warnings}, Minor: {minor} - Testing writeability...")
@@ -301,7 +286,8 @@ class FileProcessor:
         return True
 
     def check_uuid(self, metadata, file_path):
-        """Very important or we end up processing files more than once."""
+        """Very important.
+        """
         try:
             status = metadata.get("XMP:Status")
             identifier = metadata.get("XMP:Identifier")
@@ -351,14 +337,10 @@ class FileProcessor:
             print(f"Error checking UUID: {str(e)}")
             return None
 
-    # ------------------------------------------------------------------
-    # stage 3: image preprocessing -- safe to run in a worker thread
-    # ------------------------------------------------------------------
-
     def _preprocess(self, metadata):
         """Decode/resize/encode the image. Returns (base64_or_None, error).
-        No ExifTool, no renames, no callbacks -- errors are reported by the
-        main thread in _process_one."""
+        """
+        
         try:
             orientation = metadata.get("EXIF:Orientation") or 1
             processed_image, _path = self.image_processor.process_image(
@@ -367,13 +349,11 @@ class FileProcessor:
         except Exception as e:
             return None, e
 
-    # ------------------------------------------------------------------
-    # stage 4: inference + write -- main thread
-    # ------------------------------------------------------------------
-
     def _process_one(self, metadata, processed_image, error=None):
         """Run LLM generation for one triaged, preprocessed file and write
-        the result."""
+        the result.
+        """
+        
         try:
             file_path = metadata["SourceFile"]
 
@@ -493,12 +473,8 @@ class FileProcessor:
             )
             self.callback("---")
 
-    # ------------------------------------------------------------------
-    # generation
-    # ------------------------------------------------------------------
-
     def generate_metadata(self, metadata, processed_image):
-        """Generate metadata without writing to file.
+        """Generate metadata
 
         detailed_caption: keywords + a detailed caption (two generations).
         short_caption: caption and keywords in one generation.
@@ -585,31 +561,45 @@ class FileProcessor:
             }
 
     def process_keywords(self, metadata, new_keywords):
-        """Normalize keywords, dedupe, and merge old ones if configured."""
-        all_keywords = set()
+        """
+        Normalize keywords, dedupe, and merge old ones if configured.
+        Generation order is preserved. 
+        """
+        
+        # dict keys: dedupe with insertion order preserved
+        generated = {}
 
-        def add(keyword):
+        def add(bucket, keyword):
             normalized = normalize_keyword(keyword, self.banned_words, self.config)
             if isinstance(normalized, list):
-                all_keywords.update(normalized)
+                for part in normalized:
+                    bucket.setdefault(part, None)
             elif normalized:
-                all_keywords.add(normalized)
+                bucket.setdefault(normalized, None)
+
+        for kw in new_keywords:
+            add(generated, kw)
+
+        kept, dropped = limit_shared_leaders(
+            list(generated), getattr(self.config, "max_shared_leaders", 0)
+        )
+        if dropped:
+            leader = dropped[0].split()[0]
+            print(f"  Trimmed {len(dropped)} prefix-locked keywords ('{leader} ...')")
+            self.callback(
+                f"Trimmed {len(dropped)} repetitive keywords starting with '{leader}'"
+            )
+
+        all_keywords = dict.fromkeys(kept)
 
         if self.config.update_keywords:
             existing = metadata.get("MWG:Keywords", [])
             if isinstance(existing, str):
                 existing = [k.strip() for k in existing.split(",")]
             for kw in existing:
-                add(kw)
-
-        for kw in new_keywords:
-            add(kw)
+                add(all_keywords, kw)
 
         return list(all_keywords) if all_keywords else None
-
-    # ------------------------------------------------------------------
-    # writes / misc
-    # ------------------------------------------------------------------
 
     def write_metadata(self, file_path, metadata):
         return self.store.write(file_path, metadata,
@@ -618,6 +608,7 @@ class FileProcessor:
     def _on_write_error(self, image_path, write_target, writing_sidecar):
         if self.config.rename_invalid:
             metadata_io.rename_to_invalid(image_path, self.callback)
+            
             # Only ever delete a sidecar -- never the image.
             if (writing_sidecar and write_target != image_path
                     and os.path.exists(write_target)):
@@ -629,7 +620,9 @@ class FileProcessor:
 
     def get_file_type(self, file_ext):
         """Return the type key for a supported extension (.nef -> RAW),
-        else None."""
+        else None.
+        """
+            
         if not file_ext.startswith("."):
             file_ext = "." + file_ext
         return self._ext_to_type.get(file_ext.lower())
